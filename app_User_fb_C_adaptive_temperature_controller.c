@@ -92,6 +92,15 @@ MY_API void app_fb_temperature_controller_run(
     /* 1. Enable Check */
     if(input->enable == APP_FB_FALSE)
     {
+        /* Disabled controller must not retain closed-loop state. */
+        app_fb_pid_reset(&fb->pid);
+        app_fb_d_filter_reset(&fb->d_filter);
+        app_fb_integral_separation_init(
+            &fb->i_sep,
+            APP_FB_I_ENABLE_ERROR);
+        app_fb_rate_limit_reset(&fb->rate_limit, 0);
+
+        fb->previous_pwm = 0;
         fb->state = APP_FB_STATE_IDLE;
         return;
     }
@@ -99,7 +108,23 @@ MY_API void app_fb_temperature_controller_run(
     /* 2. Manual Mode */
     if(input->mode == APP_FB_MODE_MANUAL)
     {
-        output->pwm = APP_FB_LIMIT(input->manual_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+        /*
+         * Manual mode must not retain PID integral / AW / D history.
+         * Returning to AUTO therefore starts from a deterministic state.
+         */
+        app_fb_pid_reset(&fb->pid);
+        app_fb_d_filter_reset(&fb->d_filter);
+        app_fb_integral_separation_init(
+            &fb->i_sep,
+            APP_FB_I_ENABLE_ERROR);
+        app_fb_rate_limit_reset(&fb->rate_limit, input->manual_pwm);
+
+        output->pwm = APP_FB_LIMIT(
+            input->manual_pwm,
+            APP_FB_PWM_MIN,
+            APP_FB_PWM_MAX);
+        fb->previous_pwm = output->pwm;
+        fb->state = APP_FB_STATE_RUN;
         return;
     }
 
