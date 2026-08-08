@@ -5,6 +5,10 @@ Step 6:
 [MODIFY] 1. PID output is now a true raw controller output.
 [MODIFY] 2. Actuator 0..1000 limit is handled by the temperature controller.
 [MODIFY] 3. Anti-windup is based on hard PWM saturation only.
+
+Step 9-2:
+[MODIFY] 4. Keep standard back-calculation scaling for the discrete integral state.
+[MODIFY] 5. Use int64_t for saturation error and correction arithmetic.
 ***************************************************************/
 
 #include "app_User_fb_C_pid.h"
@@ -101,10 +105,12 @@ void app_fb_pid_anti_windup(
     int32_t unsaturated_output,
     int32_t actual_output)
 {
-    int32_t delta;
+    int64_t delta;
     int64_t correction;
     int64_t kaw;
     int64_t ki;
+    int64_t integral;
+    int64_t integral_limit;
 
     if(fb == 0 || fb->enable == APP_FB_FALSE)
         return;
@@ -115,40 +121,62 @@ void app_fb_pid_anti_windup(
 
     kaw = fb->param.kaw;
     ki = fb->param.ki;
+    integral_limit = (int64_t)fb->param.integral_limit;
 
-    if(kaw == 0 || ki == 0)
+    if(kaw == 0 || ki == 0 || integral_limit <= 0)
         return;
 
     /*
-     * Step 6: only hard actuator saturation is used here.
-     * Rate limiting is deliberately NOT treated as saturation.
+     * Hard saturation error only:
+     *     delta = u_sat - u_raw
+     *
+     * Rate limiting is deliberately excluded from anti-windup.
+     * int64_t is required because u_raw is a full int32_t raw output.
      */
-    delta = actual_output - unsaturated_output;
+    delta = (int64_t)actual_output - (int64_t)unsaturated_output;
     if(delta == 0)
         return;
 
-    correction = (kaw * (int64_t)delta) / ki;
+    /*
+     * The integral state is stored as accumulated error samples.
+     * Since Iout = Ki * I / 32768 and Kaw is Q15:
+     *
+     *     Delta_I = Kaw / Ki * (u_sat - u_raw)
+     *
+     * This is the standard back-calculation form for this discrete PID.
+     */
+    correction = (kaw * delta) / ki;
 
+    /* Preserve direction for sub-count corrections lost to integer division. */
     if(correction == 0)
         correction = (delta > 0) ? 1 : -1;
 
-    if(correction > (int64_t)(fb->param.integral_limit - fb->state.integral))
-        correction = (int64_t)fb->param.integral_limit - fb->state.integral;
-    else if(correction < (int64_t)(-fb->param.integral_limit - fb->state.integral))
-        correction = (int64_t)(-fb->param.integral_limit) - fb->state.integral;
+    integral = (int64_t)fb->state.integral + correction;
 
-    fb->state.integral += (int32_t)correction;
+    if(integral > integral_limit)
+        integral = integral_limit;
+    else if(integral < -integral_limit)
+        integral = -integral_limit;
+
+    fb->state.integral = (int32_t)integral;
 }
 
 void app_fb_pid_integral_add(APP_FB_PID_T *fb, int32_t value)
 {
+    int64_t integral;
+    int64_t limit;
+
     if(fb == 0) return;
 
-    fb->state.integral += value;
-    fb->state.integral = app_fb_pid_limit(
-        fb->state.integral,
-        -fb->param.integral_limit,
-        fb->param.integral_limit);
+    limit = (int64_t)fb->param.integral_limit;
+    integral = (int64_t)fb->state.integral + (int64_t)value;
+
+    if(integral > limit)
+        integral = limit;
+    else if(integral < -limit)
+        integral = -limit;
+
+    fb->state.integral = (int32_t)integral;
 }
 
 #ifdef __cplusplus
