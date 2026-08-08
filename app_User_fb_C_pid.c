@@ -133,12 +133,32 @@ void app_fb_pid_anti_windup
     ki = fb->param.ki;
     limit = fb->param.integral_limit;
 
+    /*
+     * Integral state is the accumulated error in samples:
+     *
+     *     I(k+1) = I(k) + e(k)
+     *
+     * PID I output is:
+     *
+     *     uI = Ki * I
+     *
+     * Therefore back-calculation in integral-state units is:
+     *
+     *     I += (Kaw / Ki) * (u_sat - u_raw)
+     *
+     * All intermediate arithmetic is int64_t.  The correction is
+     * applied only when hard actuator saturation actually exists.
+     */
     if(kaw <= 0 || ki <= 0 || limit <= 0)
         return;
 
     delta =
         (int64_t)actual_output -
         (int64_t)unsaturated_output;
+
+    /* No hard saturation => no anti-windup correction. */
+    if(delta == 0)
+        return;
 
     correction =
         ((int64_t)kaw * delta) /
