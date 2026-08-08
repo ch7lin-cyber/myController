@@ -7,6 +7,7 @@ Date-> 2026/05/13
 [ADD] 1. The first version sets up.
 [MODIFY] 1. Connect derivative filter output to PID.
 [MODIFY] 2. Move previous-PV ownership from PID/controller into derivative filter.
+[MODIFY] 3. Connect actual final PWM to PID back-calculation anti-windup.
 ***************************************************************/
 
 #include "ssm_std_define.h"
@@ -92,7 +93,8 @@ void app_fb_temperature_controller_run
 {
     int32_t ff_pwm;
     int32_t pid_pwm;
-    int32_t pwm_command;
+    int32_t unsaturated_command;
+    int32_t limited_command;
     int32_t limited_pwm;
     int32_t error;
     int32_t d_filtered;
@@ -148,7 +150,7 @@ void app_fb_temperature_controller_run
 
     /*
      * Derivative Filter
-     * The filter now owns previous PV and calculates dPV internally.
+     * The filter owns previous PV and calculates filtered dPV.
      * First execution after init/reset returns zero derivative.
      */
     d_filtered = app_fb_d_filter_run(
@@ -166,10 +168,15 @@ void app_fb_temperature_controller_run
 
     output->pid_output = pid_pwm;
 
-    /* Combine FF + PID */
-    pwm_command = ff_pwm + pid_pwm;
-    pwm_command = APP_FB_LIMIT(
-        pwm_command,
+    /*
+     * Combine FF + PID.
+     * Keep the unsaturated command for anti-windup feedback.
+     */
+    unsaturated_command = ff_pwm + pid_pwm;
+
+    /* Physical PWM output limit. */
+    limited_command = APP_FB_LIMIT(
+        unsaturated_command,
         APP_FB_PWM_MIN,
         APP_FB_PWM_MAX
     );
@@ -177,9 +184,22 @@ void app_fb_temperature_controller_run
     /* Output Rate Limit */
     limited_pwm = app_fb_rate_limit_run(
         &fb->rate_limit,
-        pwm_command
+        limited_command
     );
     output->pwm = limited_pwm;
+
+    /*
+     * Back-calculation Anti-Windup.
+     * Feed the final actual PWM back to the PID integral state.
+     *
+     * Using unsaturated_command here is intentional: the correction
+     * includes both hard output saturation and the rate limiter.
+     */
+    app_fb_pid_anti_windup(
+        &fb->pid,
+        unsaturated_command,
+        limited_pwm
+    );
 
     /* Adaptive Learning */
     app_fb_ff_learning_run(
