@@ -274,11 +274,11 @@ MY_API void app_fb_temperature_controller_run
     /*
      * Add learning offset
      */
-  /*
+  
 	ff_pwm += app_fb_ff_learning_get_offset (
         &fb->learning
     );
-*/
+
     ff_pwm =  APP_FB_LIMIT  (
         ff_pwm,
         APP_FB_PWM_MIN,
@@ -366,7 +366,7 @@ MY_API void app_fb_temperature_controller_run
      Adaptive Learning
      ================================================
     */
-	/*
+	
 	app_fb_ff_learning_run(
 		&fb->learning,
 		input->sv,
@@ -378,7 +378,7 @@ MY_API void app_fb_temperature_controller_run
 		&fb->learning
 	);
 	
-	*/
+	
 	
    
 
