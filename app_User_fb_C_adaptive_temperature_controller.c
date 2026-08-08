@@ -74,6 +74,7 @@ MY_API void app_fb_temperature_controller_run(
     int32_t error;
     int32_t d_filtered;
     int32_t desired_pid_output;
+    int64_t desired_pid_output64;
     int64_t total_raw64;
 
     if(fb == 0 || input == 0 || output == 0) return;
@@ -101,12 +102,18 @@ MY_API void app_fb_temperature_controller_run(
     /* 2. Manual Mode */
     if(input->mode == APP_FB_MODE_MANUAL)
     {
+        int32_t manual_pwm_limited;
+
         app_fb_pid_reset(&fb->pid);
         app_fb_d_filter_reset(&fb->d_filter);
         app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
-        app_fb_rate_limit_reset(&fb->rate_limit, input->manual_pwm);
 
-        output->pwm = APP_FB_LIMIT(input->manual_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+        /* Rate-limit state must start from the actual clamped manual output. */
+        manual_pwm_limited =
+            APP_FB_LIMIT(input->manual_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+        app_fb_rate_limit_reset(&fb->rate_limit, manual_pwm_limited);
+
+        output->pwm = manual_pwm_limited;
         fb->previous_pwm = output->pwm;
         fb->manual_active = APP_FB_TRUE;
         fb->state = APP_FB_STATE_RUN;
@@ -135,8 +142,17 @@ MY_API void app_fb_temperature_controller_run(
      */
     if(fb->manual_active == APP_FB_TRUE)
     {
+        /* Calculate in int64_t to avoid signed int32 overflow. */
+        desired_pid_output64 =
+            (int64_t)fb->previous_pwm -
+            (int64_t)ff_base_pwm -
+            (int64_t)ff_offset;
+
         desired_pid_output =
-            fb->previous_pwm - ff_base_pwm - ff_offset;
+            app_fb_controller_limit_i64(
+                desired_pid_output64,
+                INT32_MIN,
+                INT32_MAX);
 
         fb->pid.integral_enable = APP_FB_TRUE;
         app_fb_pid_bumpless_preload(
