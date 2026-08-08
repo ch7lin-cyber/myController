@@ -4,14 +4,12 @@
 extern "C" {
 #endif
 
-#define APP_FB_FF_LEARN_MAX_OFFSET  (200)
-#define APP_FB_FF_LEARN_MIN_OFFSET  (-200)
 #define APP_FB_FF_SV_CHANGE         (5)
 
 static int32_t app_fb_ff_learning_limit(int32_t value)
 {
-    if(value > APP_FB_FF_LEARN_MAX_OFFSET) return APP_FB_FF_LEARN_MAX_OFFSET;
-    if(value < APP_FB_FF_LEARN_MIN_OFFSET) return APP_FB_FF_LEARN_MIN_OFFSET;
+    if(value > APP_FB_FF_OFFSET_LIMIT) return APP_FB_FF_OFFSET_LIMIT;
+    if(value < -APP_FB_FF_OFFSET_LIMIT) return -APP_FB_FF_OFFSET_LIMIT;
     return value;
 }
 
@@ -70,10 +68,6 @@ MY_API int32_t app_fb_ff_learning_run(
 
     if(fb == 0) return 0;
 
-    /*
-     * First valid SV establishes the reference. This avoids treating
-     * startup SV as a normal setpoint change caused by previous_sv = 0.
-     */
     if(fb->sv_initialized == APP_FB_FALSE)
     {
         fb->previous_sv = (int16_t)sv;
@@ -83,7 +77,6 @@ MY_API int32_t app_fb_ff_learning_run(
         return fb->offset;
     }
 
-    /* Any meaningful SV change restarts the learning freeze window. */
     if(APP_FB_ABS(sv - (int32_t)fb->previous_sv) >= APP_FB_FF_SV_CHANGE)
     {
         fb->previous_sv = (int16_t)sv;
@@ -101,24 +94,18 @@ MY_API int32_t app_fb_ff_learning_run(
 
     error = sv - pv;
 
-    /* Learning only near the operating point. */
     if(APP_FB_ABS(error) > fb->error_threshold)
     {
         app_fb_ff_learning_clear_window(fb);
         return fb->offset;
     }
 
-    /* PID deadband: only small residual PID is interpreted as FF error. */
     if(APP_FB_ABS(pid_output) > APP_FB_FF_PID_DEADBAND)
     {
         app_fb_ff_learning_clear_window(fb);
         return fb->offset;
     }
 
-    /*
-     * One valid sample is one 20 ms controller cycle. The learning update
-     * therefore occurs after APP_FB_ADAPTIVE_PERIOD = 50 valid samples.
-     */
     fb->stable_counter++;
     fb->pid_sum += pid_output;
     fb->pid_count++;
@@ -134,14 +121,6 @@ MY_API int32_t app_fb_ff_learning_run(
 
     avg_pid = fb->pid_sum / (int32_t)fb->pid_count;
 
-    /*
-     * Q15 learning with fractional retention:
-     *     learn_q15 = avg_pid * gain
-     *     offset_delta = learn_accumulator / 32768
-     *
-     * This prevents a small value such as 10 * 512 / 32768 = 0.15625
-     * from being truncated to zero on every one-second update.
-     */
     learn_q15 = (int64_t)avg_pid * fb->gain;
     fb->learn_accumulator += learn_q15;
 
@@ -152,10 +131,10 @@ MY_API int32_t app_fb_ff_learning_run(
         fb->learn_accumulator -= delta * APP_FB_Q15_ONE;
 
         new_offset = (int64_t)fb->offset + delta;
-        if(new_offset > APP_FB_FF_LEARN_MAX_OFFSET)
-            new_offset = APP_FB_FF_LEARN_MAX_OFFSET;
-        else if(new_offset < APP_FB_FF_LEARN_MIN_OFFSET)
-            new_offset = APP_FB_FF_LEARN_MIN_OFFSET;
+        if(new_offset > APP_FB_FF_OFFSET_LIMIT)
+            new_offset = APP_FB_FF_OFFSET_LIMIT;
+        else if(new_offset < -APP_FB_FF_OFFSET_LIMIT)
+            new_offset = -APP_FB_FF_OFFSET_LIMIT;
 
         fb->offset = (int32_t)new_offset;
     }
