@@ -1,4 +1,3 @@
-
 /***************************************************************
 Description : 
 	This is a user USER_ADAPTIVE_TEMP_CONTROLLER program application.
@@ -10,7 +9,7 @@ Change notice:
 Date-> 2026/05/13
 [ADD] 1. The first version sets up. 
 
-[MODIFY] 1. The first version sets up. 
+[MODIFY] 1. Connect derivative filter output to PID.
 
 [DELETE] 1. The first version sets up. 
 
@@ -302,17 +301,23 @@ MY_API void app_fb_temperature_controller_run
      ================================================
      Derivative Filter
      D on PV
+
+     Raw derivative is calculated from the previous PV
+     maintained in the PID state.  The filtered result is
+     passed directly to the PID D term.
      ================================================
     */
-    d_raw =   input->pv - fb->pid.state.pv_previous;
+    d_raw = input->pv - fb->pid.state.pv_previous;
 
-    d_filtered =  app_fb_d_filter_run  (
+    d_filtered = app_fb_d_filter_run
+    (
         &fb->d_filter,
         d_raw
     );
 
     /*
-     * Store filtered derivative
+     * Keep the previous PV state for the derivative input.
+     * PID itself uses the filtered derivative value.
      */
     fb->pid.state.pv_previous = input->pv;
 
@@ -325,7 +330,8 @@ MY_API void app_fb_temperature_controller_run
     (
         &fb->pid,
         input->sv,
-        input->pv
+        input->pv,
+        d_filtered
     );
 
     output->pid_output = pid_pwm;
@@ -335,52 +341,43 @@ MY_API void app_fb_temperature_controller_run
      Combine FF + PID
      ================================================
     */
-    pwm_command =  ff_pwm + pid_pwm;
-    pwm_command = APP_FB_LIMIT   (
+    pwm_command = ff_pwm + pid_pwm;
+    pwm_command = APP_FB_LIMIT
+    (
         pwm_command,
         APP_FB_PWM_MIN,
         APP_FB_PWM_MAX
     );
-
-
-	
-
-
-
 
     /*
      ================================================
      Output Rate Limit
      ================================================
     */
-
-
-    limited_pwm =  app_fb_rate_limit_run(
+    limited_pwm = app_fb_rate_limit_run
+    (
         &fb->rate_limit,
         pwm_command
     );
     output->pwm = limited_pwm;
-	
-	/*
+
+    /*
      ================================================
      Adaptive Learning
      ================================================
     */
-	
-	app_fb_ff_learning_run(
-		&fb->learning,
-		input->sv,
-		input->pv,
-		pid_pwm
-	);
+    app_fb_ff_learning_run
+    (
+        &fb->learning,
+        input->sv,
+        input->pv,
+        pid_pwm
+    );
 
-	output->ff_offset = app_fb_ff_learning_get_offset(
-		&fb->learning
-	);
-	
-	
-	
-   
+    output->ff_offset = app_fb_ff_learning_get_offset
+    (
+        &fb->learning
+    );
 
     fb->state = APP_FB_STATE_RUN;
 }
@@ -393,5 +390,3 @@ MY_API void app_fb_temperature_controller_run
 }
 #endif
 //------------------------------------------------------------------------------------//
-
-
