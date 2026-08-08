@@ -131,14 +131,20 @@ void app_fb_pid_anti_windup
 
     if(fb->enable == APP_FB_FALSE ||
        fb->integral_enable == APP_FB_FALSE)
+    {
+        fb->state.aw_remainder = 0;
         return;
+    }
 
     kaw = fb->param.kaw;
     ki = fb->param.ki;
     limit = fb->param.integral_limit;
 
     if(kaw <= 0 || ki <= 0 || limit <= 0)
+    {
+        fb->state.aw_remainder = 0;
         return;
+    }
 
     delta =
         (int64_t)actual_output -
@@ -151,12 +157,16 @@ void app_fb_pid_anti_windup
     }
 
     /*
-     * Back-calculation is performed in integral-state units:
+     * Keep aw_remainder strictly in numerator units (Kaw * PWM counts).
      *
-     *     correction = Kaw / Ki * (u_sat - u_raw)
+     *     numerator   = Kaw * delta + remainder
+     *     correction  = numerator / Ki
+     *     remainder   = numerator % Ki
      *
-     * Keep the division remainder so small corrections are not lost by
-     * integer truncation. This is important when Kaw/Ki is fractional.
+     * The correction limit is applied only after conversion to integral
+     * state units. The clipped portion is intentionally NOT added back to
+     * aw_remainder because it is not a fractional division remainder.
+     * The saturation error is evaluated again on the next controller cycle.
      */
     numerator =
         ((int64_t)kaw * delta) +
@@ -165,25 +175,12 @@ void app_fb_pid_anti_windup
     correction = numerator / (int64_t)ki;
     fb->state.aw_remainder = numerator % (int64_t)ki;
 
-    /*
-     * Limit the amount of integral unwinding per 20ms controller cycle.
-     * With the current defaults, Kaw/Ki ~= 2.73 and a full 1000-count
-     * saturation error would otherwise request about 2730 counts in one
-     * cycle. The limit prevents a single sample from almost emptying the
-     * +/-3000 integral state.
-     */
+    /* Limit integral unwinding per controller cycle. */
     limited_correction = correction;
     if(limited_correction > (int64_t)APP_FB_PID_AW_MAX_CORRECTION)
         limited_correction = (int64_t)APP_FB_PID_AW_MAX_CORRECTION;
     else if(limited_correction < -(int64_t)APP_FB_PID_AW_MAX_CORRECTION)
         limited_correction = -(int64_t)APP_FB_PID_AW_MAX_CORRECTION;
-
-    /* If correction is clipped, keep the un-applied portion for later. */
-    if(limited_correction != correction)
-    {
-        int64_t unapplied = correction - limited_correction;
-        fb->state.aw_remainder += unapplied * (int64_t)ki;
-    }
 
     integral_candidate =
         (int64_t)fb->state.integral +
@@ -195,6 +192,13 @@ void app_fb_pid_anti_windup
         integral_candidate = -(int64_t)limit;
 
     fb->state.integral = (int32_t)integral_candidate;
+
+    /* Integral limit is authoritative; discard stale fractional state. */
+    if(fb->state.integral == limit ||
+       fb->state.integral == -limit)
+    {
+        fb->state.aw_remainder = 0;
+    }
 }
 
 void app_fb_pid_integral_add
@@ -218,6 +222,9 @@ void app_fb_pid_integral_add
         integral_candidate = -(int64_t)fb->param.integral_limit;
 
     fb->state.integral = (int32_t)integral_candidate;
+
+    /* External integral correction invalidates pending fractional AW state. */
+    fb->state.aw_remainder = 0;
 }
 
 #ifdef __cplusplus
