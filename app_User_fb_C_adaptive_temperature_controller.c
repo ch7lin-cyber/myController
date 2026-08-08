@@ -278,14 +278,15 @@ MY_API void app_fb_temperature_controller_run
 	ff_pwm += app_fb_ff_learning_get_offset (
         &fb->learning
     );
-
+*/
     ff_pwm =  APP_FB_LIMIT  (
         ff_pwm,
         APP_FB_PWM_MIN,
         APP_FB_PWM_MAX
     );
+	
     output->ff_pwm = ff_pwm;
-*/
+
     /*
      ================================================
      Integral Separation
@@ -353,13 +354,13 @@ MY_API void app_fb_temperature_controller_run
      ================================================
     */
 
-/*
+
     limited_pwm =  app_fb_rate_limit_run(
         &fb->rate_limit,
         pwm_command
     );
     output->pwm = limited_pwm;
-*/	
+	
 	/*
      ================================================
      Adaptive Learning
