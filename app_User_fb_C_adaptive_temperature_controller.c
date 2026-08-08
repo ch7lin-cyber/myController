@@ -8,6 +8,7 @@ Date-> 2026/05/13
 [MODIFY] 1. Connect derivative filter output to PID.
 [MODIFY] 2. Move previous-PV ownership from PID/controller into derivative filter.
 [MODIFY] 3. Connect actual final PWM to PID back-calculation anti-windup.
+[MODIFY] 4. Use configurable PID Kaw for discrete-time anti-windup.
 ***************************************************************/
 
 #include "ssm_std_define.h"
@@ -24,7 +25,8 @@ static const APP_FB_PID_PARAMETER_T default_pid =
     .ki = APP_FB_PID_KI_DEFAULT,
     .kd = APP_FB_PID_KD_DEFAULT,
     .integral_limit = APP_FB_PID_INTEGRAL_LIMIT,
-    .output_limit = APP_FB_PID_OUTPUT_LIMIT
+    .output_limit = APP_FB_PID_OUTPUT_LIMIT,
+    .kaw = APP_FB_PID_KAW_DEFAULT
 };
 
 void app_fb_temperature_controller_init(
