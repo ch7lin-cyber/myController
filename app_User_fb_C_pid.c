@@ -5,20 +5,6 @@
 extern "C" {
 #endif
 
-static int32_t app_fb_pid_limit
-(
-    int32_t value,
-    int32_t min_value,
-    int32_t max_value
-)
-{
-    if(value > max_value)
-        return max_value;
-    if(value < min_value)
-        return min_value;
-    return value;
-}
-
 void app_fb_pid_init
 (
     APP_FB_PID_T *fb,
@@ -175,7 +161,6 @@ void app_fb_pid_anti_windup
     correction = numerator / (int64_t)ki;
     fb->state.aw_remainder = numerator % (int64_t)ki;
 
-    /* Limit integral unwinding per controller cycle. */
     limited_correction = correction;
     if(limited_correction > (int64_t)APP_FB_PID_AW_MAX_CORRECTION)
         limited_correction = (int64_t)APP_FB_PID_AW_MAX_CORRECTION;
@@ -222,8 +207,6 @@ void app_fb_pid_integral_add
         integral_candidate = -(int64_t)fb->param.integral_limit;
 
     fb->state.integral = (int32_t)integral_candidate;
-
-    /* External integral correction invalidates pending fractional AW state. */
     fb->state.aw_remainder = 0;
 }
 
