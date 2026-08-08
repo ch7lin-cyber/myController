@@ -8,6 +8,7 @@ Date-> 2026/05/13
 [MODIFY] 1. Remove previous PV ownership from PID; derivative state belongs to D filter.
 [MODIFY] 2. Add back-calculation anti-windup interface.
 [MODIFY] 3. Clarify anti-windup output semantics: hard PWM saturation only; rate limiting is excluded.
+[MODIFY] 4. Add persistent anti-windup remainder state for fractional correction.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_C_CONTROL_CODE_H_
 #define SSM_STD_FB_APP_C_CONTROL_CODE_H_
@@ -34,6 +35,13 @@ typedef struct
 
     /* PID output */
     int32_t output;
+
+    /*
+     * Fractional back-calculation remainder.
+     * Units: numerator remainder in Kaw*PWM units.
+     * This preserves sub-integer integral correction between cycles.
+     */
+    int64_t aw_remainder;
 
 } APP_FB_PID_STATE_T;
 
@@ -95,9 +103,10 @@ int32_t app_fb_pid_run
      passed to this function.
 
  The correction is applied to the PID integral accumulator.
- The current implementation uses the configured back-calculation
- gain and integral gain according to the implementation in the
- corresponding .c file.
+ The per-cycle correction limit is configured by
+ APP_FB_PID_AW_MAX_CORRECTION in app_User_fb_C_parameter.h.
+ Fractional correction is retained in the PID state so integer
+ truncation does not accumulate a systematic bias.
 ====================================================
 */
 void app_fb_pid_anti_windup
