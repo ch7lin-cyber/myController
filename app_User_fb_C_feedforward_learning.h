@@ -33,6 +33,8 @@ int32_t app_fb_ff_learning_get_offset(APP_FB_FF_LEARNING_T *fb);
 #define APP_FB_FF_PID_DEADBAND (10)
 #define APP_FB_FF_STABLE_COUNT (APP_FB_ADAPTIVE_PERIOD)
 #define APP_FB_FF_FREEZE_COUNT (250)
+
+/* Single source of truth for adaptive FF offset range. */
 #define APP_FB_FF_OFFSET_LIMIT (200)
 
 #ifdef __cplusplus
