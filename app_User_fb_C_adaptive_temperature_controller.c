@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "app_User_fb_C_adaptive_temperature_controller.h"
 #include "app_User_fb_C_parameter.h"
 
@@ -12,8 +13,59 @@ static int32_t app_fb_controller_limit_i64(int64_t value, int32_t min_value, int
     return (int32_t)value;
 }
 
+MY_API void app_fb_temperature_controller_init
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter
+)
+{
+    if(fb == 0)
+        return;
+
+    app_fb_pid_init(&fb->pid, pid_parameter);
+    app_fb_feedforward_init(&fb->ff, ff_table, ff_size);
+    app_fb_d_filter_init(&fb->d_filter, APP_FB_D_FILTER_ALPHA);
+    app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
+    app_fb_rate_limit_init(
+        &fb->rate_limit,
+        APP_FB_PWM_RISE_LIMIT,
+        APP_FB_PWM_FALL_LIMIT);
+    app_fb_ff_learning_init(&fb->learning, 0);
+
+    fb->previous_pwm = 0;
+    fb->state = APP_FB_STATE_IDLE;
+}
+
+MY_API void app_fb_temperature_controller_reset
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb
+)
+{
+    if(fb == 0)
+        return;
+
+    app_fb_pid_reset(&fb->pid);
+
+    if(fb->ff.table != 0 && fb->ff.size > 0)
+        app_fb_feedforward_init(&fb->ff, fb->ff.table, fb->ff.size);
+    else
+        fb->ff.output = 0;
+
+    app_fb_d_filter_reset(&fb->d_filter);
+    app_fb_integral_separation_init(
+        &fb->i_sep,
+        APP_FB_I_ENABLE_ERROR);
+    app_fb_rate_limit_reset(&fb->rate_limit, 0);
+    app_fb_ff_learning_reset(&fb->learning);
+
+    fb->previous_pwm = 0;
+    fb->state = APP_FB_STATE_IDLE;
+}
+
 /* Main Controller Execute: 50Hz */
-void app_fb_temperature_controller_run(
+MY_API void app_fb_temperature_controller_run(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_TEMP_CONTROLLER_INPUT_T *input,
     APP_FB_TEMP_CONTROLLER_OUTPUT_T *output)
@@ -35,6 +87,7 @@ void app_fb_temperature_controller_run(
     output->ff_pwm = 0;
     output->pid_output = 0;
     output->ff_offset = 0;
+    output->error = 0;
 
     /* 1. Enable Check */
     if(input->enable == APP_FB_FALSE)
@@ -109,6 +162,7 @@ void app_fb_temperature_controller_run(
     }
 
     output->ff_offset = app_fb_ff_learning_get_offset(&fb->learning);
+    fb->previous_pwm = actual_pwm;
     fb->state = APP_FB_STATE_RUN;
 }
 
