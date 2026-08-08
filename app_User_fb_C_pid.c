@@ -7,6 +7,7 @@ Date-> 2026/05/13
 [ADD] 1. The first version sets up.
 [MODIFY] 1. Connect filtered derivative input to PID.
 [MODIFY] 2. Remove previous-PV ownership from PID; derivative filter owns it.
+[MODIFY] 3. Add back-calculation anti-windup.
 ***************************************************************/
 
 #include "app_User_fb_C_pid.h"
@@ -117,6 +118,7 @@ int32_t app_fb_pid_run
 
     output = p_term + i_term + d_term;
 
+    /* PID correction output limit. */
     output = app_fb_pid_limit
     (
         output,
@@ -128,6 +130,81 @@ int32_t app_fb_pid_run
     fb->state.output = output;
 
     return output;
+}
+
+/*
+====================================================
+ Back Calculation Anti-Windup
+
+ The controller calls this after the final actual PWM is
+ available. The difference between actual and unsaturated
+ total command is fed back to the PID integral accumulator.
+
+     integral += Kaw / Ki * (actual - unsaturated)
+
+ Kaw is Q15 and comes from APP_FB_KAW.
+
+ Integral Separation remains the authority for deciding when
+ the integral is active. Therefore the correction is applied
+ only while integral is enabled.
+====================================================
+*/
+void app_fb_pid_anti_windup
+(
+    APP_FB_PID_T *fb,
+    int32_t unsaturated_output,
+    int32_t actual_output
+)
+{
+    int32_t delta;
+    int64_t correction;
+
+    if(fb == 0)
+        return;
+
+    if(fb->enable == APP_FB_FALSE)
+        return;
+
+    if(fb->integral_enable == APP_FB_FALSE)
+        return;
+
+    if(fb->param.ki == 0)
+        return;
+
+    /* No saturation/rate-limit error: no correction required. */
+    delta = actual_output - unsaturated_output;
+    if(delta == 0)
+        return;
+
+    /*
+     * PID integral output is:
+     *     Iout = Ki * integral / 32768
+     *
+     * Desired Iout correction:
+     *     Kaw * delta / 32768
+     *
+     * Therefore the integral-state correction is:
+     *     Kaw * delta / Ki
+     */
+    correction = (int64_t)APP_FB_KAW * delta;
+    correction /= fb->param.ki;
+
+    /*
+     * Avoid a small correction disappearing forever due to
+     * integer truncation. Preserve at least one accumulator
+     * count when the requested correction is non-zero.
+     */
+    if(correction == 0)
+        correction = (delta > 0) ? 1 : -1;
+
+    fb->state.integral += (int32_t)correction;
+
+    fb->state.integral = app_fb_pid_limit
+    (
+        fb->state.integral,
+        -fb->param.integral_limit,
+        fb->param.integral_limit
+    );
 }
 
 void app_fb_pid_integral_add
