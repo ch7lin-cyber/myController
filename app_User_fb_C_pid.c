@@ -1,4 +1,3 @@
-
 /***************************************************************
 Description : 
 	This is a user User fb C program application.
@@ -24,7 +23,6 @@ Date-> 2026/05/13
 extern "C" {
 #endif
 //------------------------------------------------------------------------------------//
-
 
 
 /*
@@ -95,6 +93,11 @@ MY_API void app_fb_pid_reset( APP_FB_PID_T *fb )
 ====================================================
  PID Execute
  PID = P + I + D
+
+Integral Separation is controlled by the caller through
+fb->integral_enable.  The PID FB must not duplicate the
+Integral Separation decision because the controller-level
+Integral Separation FB also provides hysteresis/state.
 ====================================================
 */
 MY_API int32_t app_fb_pid_run
@@ -131,81 +134,67 @@ MY_API int32_t app_fb_pid_run
      P = Kp * Error
      ================================================
     */
-    temp =    (int64_t)fb->param.kp   *    error;
-    p_term =   (int32_t)(temp >> 15);
+    temp = (int64_t)fb->param.kp * error;
+    p_term = (int32_t)(temp >> 15);
 
     /*
      ================================================
      Integral Separation
-     Only integrate near SV
-     Example:
-     Error < 2℃
-     ================================================
-    */
-    if(APP_FB_ABS(error)  <= APP_FB_I_ENABLE_ERROR)
-    {
-        fb->integral_enable = APP_FB_TRUE;
-    }
-    else
-    {
-        fb->integral_enable = APP_FB_FALSE;
-    }
 
-
-    /*
-     ================================================
-     I Term
+     The Integral Separation FB is executed by the
+     temperature controller before this PID FB is called.
+     Do not calculate the condition again here.
      ================================================
     */
     if(fb->integral_enable == APP_FB_TRUE)
     {
-
         fb->state.integral += error;
-		
+
         /*
          * Integral Limit
          */
-        fb->state.integral =    app_fb_pid_limit
+        fb->state.integral = app_fb_pid_limit
         (
-
             fb->state.integral,
             -fb->param.integral_limit,
             fb->param.integral_limit
         );
     }
 
-    temp =    (int64_t)fb->param.ki   *  fb->state.integral;
-
-    i_term =   (int32_t)(temp >> 15);
+    temp = (int64_t)fb->param.ki * fb->state.integral;
+    i_term = (int32_t)(temp >> 15);
 
     /*
      ================================================
      D Term
      D on Measurement
      D = -Kd * dPV
+
+     NOTE:
+     Step 1 intentionally keeps the existing D path
+     unchanged.  The controller-level derivative filter
+     will be connected to this FB in Step 2.
      ================================================
     */
-    temp =  (int64_t)fb->param.kd *  (pv - fb->state.pv_previous);
-    d_term =  -(int32_t)(temp >> 15);
-
+    temp = (int64_t)fb->param.kd * (pv - fb->state.pv_previous);
+    d_term = -(int32_t)(temp >> 15);
 
     /*
      ================================================
      PID Output
      ================================================
     */
-    output = p_term  +  i_term  +  d_term;
+    output = p_term + i_term + d_term;
 
     /*
      * Output Limit
      */
-    output =  app_fb_pid_limit
+    output = app_fb_pid_limit
     (
         output,
         -fb->param.output_limit,
         fb->param.output_limit
     );
-
 
     /*
      * Save state
@@ -232,10 +221,10 @@ MY_API void app_fb_pid_integral_add
 
     if(fb == 0)
         return;
-	
+
     fb->state.integral += value;
 
-    fb->state.integral =  app_fb_pid_limit
+    fb->state.integral = app_fb_pid_limit
     (
         fb->state.integral,
         -fb->param.integral_limit,
