@@ -9,10 +9,12 @@ Date-> 2026/05/13
 [MODIFY] 2. Add back-calculation anti-windup interface.
 [MODIFY] 3. Clarify anti-windup output semantics: hard PWM saturation only; rate limiting is excluded.
 [MODIFY] 4. Add persistent anti-windup remainder state for fractional correction.
+[MODIFY] 5. Keep PID state declaration synchronized with anti-windup implementation.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_C_CONTROL_CODE_H_
 #define SSM_STD_FB_APP_C_CONTROL_CODE_H_
 
+#include <stdint.h>
 #include "app_User_fb_C_control_type.h"
 #include "app_User_fb_C_parameter.h"
 
