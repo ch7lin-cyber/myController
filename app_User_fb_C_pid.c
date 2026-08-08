@@ -9,7 +9,7 @@ Change notice:
 Date-> 2026/05/13
 [ADD] 1. The first version sets up. 
 
-[MODIFY] 1. The first version sets up. 
+[MODIFY] 1. Connect filtered derivative input to PID.
 
 [DELETE] 1. The first version sets up. 
 
@@ -98,13 +98,17 @@ Integral Separation is controlled by the caller through
 fb->integral_enable.  The PID FB must not duplicate the
 Integral Separation decision because the controller-level
 Integral Separation FB also provides hysteresis/state.
+
+Derivative is D-on-measurement and is supplied by the
+controller after the derivative filter.
 ====================================================
 */
 MY_API int32_t app_fb_pid_run
 (
     APP_FB_PID_T *fb,
     APP_FB_TEMP sv,
-    APP_FB_TEMP pv
+    APP_FB_TEMP pv,
+    int32_t d_filtered
 )
 {
 
@@ -168,15 +172,13 @@ MY_API int32_t app_fb_pid_run
      ================================================
      D Term
      D on Measurement
-     D = -Kd * dPV
+     D = -Kd * dPV_filtered
 
-     NOTE:
-     Step 1 intentionally keeps the existing D path
-     unchanged.  The controller-level derivative filter
-     will be connected to this FB in Step 2.
+     The derivative filter is executed by the temperature
+     controller.  PID uses the filtered derivative directly.
      ================================================
     */
-    temp = (int64_t)fb->param.kd * (pv - fb->state.pv_previous);
+    temp = (int64_t)fb->param.kd * d_filtered;
     d_term = -(int32_t)(temp >> 15);
 
     /*
@@ -242,5 +244,3 @@ MY_API void app_fb_pid_integral_add
 }
 #endif
 //------------------------------------------------------------------------------------//
-
-
