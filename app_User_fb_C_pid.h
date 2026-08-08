@@ -7,6 +7,7 @@ Date-> 2026/05/13
 [ADD] 1. The first version sets up.
 [MODIFY] 1. Remove previous PV ownership from PID; derivative state belongs to D filter.
 [MODIFY] 2. Add back-calculation anti-windup interface.
+[MODIFY] 3. Clarify anti-windup output semantics: hard PWM saturation only; rate limiting is excluded.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_C_CONTROL_CODE_H_
 #define SSM_STD_FB_APP_C_CONTROL_CODE_H_
@@ -86,15 +87,17 @@ int32_t app_fb_pid_run
  Back Calculation Anti-Windup
 
  unsaturated_output:
-     Controller command before output/rate limiting.
+     Combined controller command before hard PWM saturation.
 
  actual_output:
-     Actual PWM after output limiting and rate limiting.
+     PWM command after hard PWM saturation and before output
+     rate limiting. The rate-limited actuator output MUST NOT be
+     passed to this function.
 
- The correction is applied to the PID integral accumulator:
-     integral += Kaw/Ki * (actual - unsaturated)
-
- Kaw is Q15 and is taken from APP_FB_KAW.
+ The correction is applied to the PID integral accumulator.
+ The current implementation uses the configured back-calculation
+ gain and integral gain according to the implementation in the
+ corresponding .c file.
 ====================================================
 */
 void app_fb_pid_anti_windup
