@@ -148,11 +148,15 @@ static const APP_FB_PID_PARAMETER_T heater_pid =
     .integral_limit = 5000,
 
     /*
-     * PID correction limit
+     * Legacy PID correction limit field.
+     * Kept for compatibility; PID no longer clamps with it.
      */
+    .output_limit = 450,
 
-    .output_limit = 450
-
+    /*
+     * Back-calculation gain, Q15.
+     */
+    .kaw = APP_FB_PID_KAW_DEFAULT
 };
 
 APP_FB_TEMPERATURE_CONTROLLER_T  heater_controller;
