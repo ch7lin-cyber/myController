@@ -12,7 +12,7 @@ version: V0001
 
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_USER_C_PARAMETER_CODE_H_
-#define SSM_STD_FB_APP_USER_C_PARAMETER_CODE_H_
+#define SSM_STD_FB_APP_USER_C_PARAMETER_CODE_H
 
 //------------------------------------------------------------------------------------//
 // C++ compatibility  // DO NOT DELETE
@@ -119,6 +119,9 @@ typedef struct
  * preserving standard back-calculation semantics.
  */
 #define APP_FB_PID_KAW_DEFAULT         1638
+
+/* Maximum anti-windup integral correction per controller cycle (Ts=20ms). */
+#define APP_FB_PID_AW_MAX_CORRECTION   300
 
 /* Integral Separation: 2℃ */
 #define APP_FB_I_ENABLE_ERROR          20
