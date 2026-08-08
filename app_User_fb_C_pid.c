@@ -31,6 +31,7 @@ void app_fb_pid_init
     fb->state.integral = 0;
     fb->state.error_previous = 0;
     fb->state.output = 0;
+    fb->state.aw_remainder = 0;
     fb->enable = APP_FB_TRUE;
     fb->integral_enable = APP_FB_TRUE;
 
@@ -49,6 +50,7 @@ void app_fb_pid_reset
     fb->state.integral = 0;
     fb->state.error_previous = 0;
     fb->state.output = 0;
+    fb->state.aw_remainder = 0;
 }
 
 int32_t app_fb_pid_run
@@ -116,8 +118,10 @@ void app_fb_pid_anti_windup
 )
 {
     int64_t delta;
+    int64_t numerator;
     int64_t correction;
     int64_t integral_candidate;
+    int64_t limited_correction;
     int32_t kaw;
     int32_t ki;
     int32_t limit;
@@ -133,22 +137,6 @@ void app_fb_pid_anti_windup
     ki = fb->param.ki;
     limit = fb->param.integral_limit;
 
-    /*
-     * Integral state is the accumulated error in samples:
-     *
-     *     I(k+1) = I(k) + e(k)
-     *
-     * PID I output is:
-     *
-     *     uI = Ki * I
-     *
-     * Therefore back-calculation in integral-state units is:
-     *
-     *     I += (Kaw / Ki) * (u_sat - u_raw)
-     *
-     * All intermediate arithmetic is int64_t.  The correction is
-     * applied only when hard actuator saturation actually exists.
-     */
     if(kaw <= 0 || ki <= 0 || limit <= 0)
         return;
 
@@ -156,17 +144,50 @@ void app_fb_pid_anti_windup
         (int64_t)actual_output -
         (int64_t)unsaturated_output;
 
-    /* No hard saturation => no anti-windup correction. */
     if(delta == 0)
+    {
+        fb->state.aw_remainder = 0;
         return;
+    }
 
-    correction =
-        ((int64_t)kaw * delta) /
-        (int64_t)ki;
+    /*
+     * Back-calculation is performed in integral-state units:
+     *
+     *     correction = Kaw / Ki * (u_sat - u_raw)
+     *
+     * Keep the division remainder so small corrections are not lost by
+     * integer truncation. This is important when Kaw/Ki is fractional.
+     */
+    numerator =
+        ((int64_t)kaw * delta) +
+        fb->state.aw_remainder;
+
+    correction = numerator / (int64_t)ki;
+    fb->state.aw_remainder = numerator % (int64_t)ki;
+
+    /*
+     * Limit the amount of integral unwinding per 20ms controller cycle.
+     * With the current defaults, Kaw/Ki ~= 2.73 and a full 1000-count
+     * saturation error would otherwise request about 2730 counts in one
+     * cycle. The limit prevents a single sample from almost emptying the
+     * +/-3000 integral state.
+     */
+    limited_correction = correction;
+    if(limited_correction > (int64_t)APP_FB_PID_AW_MAX_CORRECTION)
+        limited_correction = (int64_t)APP_FB_PID_AW_MAX_CORRECTION;
+    else if(limited_correction < -(int64_t)APP_FB_PID_AW_MAX_CORRECTION)
+        limited_correction = -(int64_t)APP_FB_PID_AW_MAX_CORRECTION;
+
+    /* If correction is clipped, keep the un-applied portion for later. */
+    if(limited_correction != correction)
+    {
+        int64_t unapplied = correction - limited_correction;
+        fb->state.aw_remainder += unapplied * (int64_t)ki;
+    }
 
     integral_candidate =
         (int64_t)fb->state.integral +
-        correction;
+        limited_correction;
 
     if(integral_candidate > (int64_t)limit)
         integral_candidate = (int64_t)limit;
