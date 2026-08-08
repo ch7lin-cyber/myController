@@ -1,35 +1,21 @@
 /***************************************************************
-Description : 
+Description :
 	This is a user User fb C program application header.
 
-
-------------------------------------------------------------------------------------------------------------------------------------------
 Change notice:
-
 Date-> 2026/05/13
-[ADD] 1. The first version sets up. 
-
-[MODIFY] 1. Add filtered derivative input to PID execute API.
-
-[DELETE] 1. The first version sets up. 
-
-**************************************************************************************/
+[ADD] 1. The first version sets up.
+[MODIFY] 1. Remove previous PV ownership from PID; derivative state belongs to D filter.
+***************************************************************/
 #ifndef SSM_STD_FB_APP_C_CONTROL_CODE_H_
 #define SSM_STD_FB_APP_C_CONTROL_CODE_H_
-
 
 #include "app_User_fb_C_control_type.h"
 #include "app_User_fb_C_parameter.h"
 
-
-
-//------------------------------------------------------------------------------------//
-// C++ compatibility // DO NOT DELETE
 #ifdef __cplusplus
 extern "C" {
 #endif
-//------------------------------------------------------------------------------------//
-
 
 /*
 ====================================================
@@ -38,30 +24,16 @@ extern "C" {
 */
 typedef struct
 {
-
-    /*
-     * Integral accumulator
-     */
+    /* Integral accumulator */
     int32_t integral;
 
-    /*
-     * Previous error
-     */
+    /* Previous error */
     int32_t error_previous;
 
-    /*
-     * Previous PV
-     */
-    int32_t pv_previous;
-	
-    /*
-     * PID output
-     */
-
+    /* PID output */
     int32_t output;
 
-}APP_FB_PID_STATE_T;
-
+} APP_FB_PID_STATE_T;
 
 /*
 ====================================================
@@ -70,61 +42,34 @@ typedef struct
 */
 typedef struct
 {
-
-    /*
-     * Parameter
-     */
     APP_FB_PID_PARAMETER_T param;
-
-    /*
-     * State
-     */
     APP_FB_PID_STATE_T state;
-
-    /*
-     * Enable
-     */
     APP_FB_BOOL enable;
-
-    /*
-     * Integral enable
-     */
     APP_FB_BOOL integral_enable;
 
-}APP_FB_PID_T;
+} APP_FB_PID_T;
 
-/*
-====================================================
- Initialize
-====================================================
-*/
-void
-app_fb_pid_init
+void app_fb_pid_init
 (
     APP_FB_PID_T *fb,
     const APP_FB_PID_PARAMETER_T *param
 );
 
-
-/*
-====================================================
- Reset
-====================================================
-*/
 void app_fb_pid_reset
 (
     APP_FB_PID_T *fb
 );
 
-
 /*
 ====================================================
  PID Execute
  Input:
- SV: 0.1℃
- PV: 0.1℃
- D input: filtered dPV, 0.1℃ / sample
- Output: PID correction PWM -150 ~ +150
+ SV: 0.1°C
+ PV: 0.1°C
+ D input: filtered dPV, 0.1°C / sample
+ Output: PID correction PWM
+
+ Derivative history is owned by the derivative-filter FB.
 ====================================================
 */
 int32_t app_fb_pid_run
@@ -135,23 +80,15 @@ int32_t app_fb_pid_run
     int32_t d_filtered
 );
 
-/*
-====================================================
- External Integral Correction
- Anti Windup use
-====================================================
-*/
+/* External Integral Correction / Anti-Windup use */
 void app_fb_pid_integral_add
 (
     APP_FB_PID_T *fb,
     int32_t value
 );
 
-
-//------------------------------------------------------------------------------------//
-// C++ compatibility
 #ifdef __cplusplus
 }
 #endif
-//------------------------------------------------------------------------------------//
+
 #endif  // SSM_STD_FB_APP_C_CONTROL_CODE_H_
