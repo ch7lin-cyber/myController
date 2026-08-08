@@ -8,6 +8,7 @@ Date-> 2026/05/13
 [MODIFY] 1. Connect filtered derivative input to PID.
 [MODIFY] 2. Remove previous-PV ownership from PID; derivative filter owns it.
 [MODIFY] 3. Add back-calculation anti-windup.
+[MODIFY] 4. Clarify discrete-time Q15 scaling and use configurable Kaw.
 ***************************************************************/
 
 #include "app_User_fb_C_pid.h"
@@ -68,6 +69,14 @@ void app_fb_pid_reset( APP_FB_PID_T *fb )
 
  Derivative is D-on-measurement and is supplied by the
  derivative-filter FB. The PID FB does not own previous PV.
+
+ Discrete-time scaling:
+     P = Kp * error
+     I = Ki * sum(error)
+     D = -Kd * filtered_dPV
+
+ All gains are Q15. Ki already includes Ts, and filtered_dPV
+ is expressed as change per controller sample.
 ====================================================
 */
 int32_t app_fb_pid_run
@@ -93,7 +102,7 @@ int32_t app_fb_pid_run
 
     error = sv - pv;
 
-    /* P = Kp * Error */
+    /* P = Kp * Error / 32768 */
     temp = (int64_t)fb->param.kp * error;
     p_term = (int32_t)(temp >> 15);
 
@@ -109,10 +118,11 @@ int32_t app_fb_pid_run
         );
     }
 
+    /* I = Ki * accumulated_error / 32768 */
     temp = (int64_t)fb->param.ki * fb->state.integral;
     i_term = (int32_t)(temp >> 15);
 
-    /* D = -Kd * filtered dPV */
+    /* D = -Kd * filtered_dPV / 32768 */
     temp = (int64_t)fb->param.kd * d_filtered;
     d_term = -(int32_t)(temp >> 15);
 
@@ -142,11 +152,16 @@ int32_t app_fb_pid_run
 
      integral += Kaw / Ki * (actual - unsaturated)
 
- Kaw is Q15 and comes from APP_FB_KAW.
+ Kaw and Ki are both Q15, so their ratio is dimensionless.
+ The calculation uses 64-bit intermediate arithmetic.
+
+ IMPORTANT:
+ Ki is the discrete integral gain already including Ts.
+ Therefore this equation is valid for the discrete integral
+ implementation used by app_fb_pid_run().
 
  Integral Separation remains the authority for deciding when
- the integral is active. Therefore the correction is applied
- only while integral is enabled.
+ the integral is active.
 ====================================================
 */
 void app_fb_pid_anti_windup
@@ -158,6 +173,8 @@ void app_fb_pid_anti_windup
 {
     int32_t delta;
     int64_t correction;
+    int64_t kaw;
+    int64_t ki;
 
     if(fb == 0)
         return;
@@ -168,7 +185,10 @@ void app_fb_pid_anti_windup
     if(fb->integral_enable == APP_FB_FALSE)
         return;
 
-    if(fb->param.ki == 0)
+    kaw = fb->param.kaw;
+    ki = fb->param.ki;
+
+    if(kaw == 0 || ki == 0)
         return;
 
     /* No saturation/rate-limit error: no correction required. */
@@ -180,31 +200,34 @@ void app_fb_pid_anti_windup
      * PID integral output is:
      *     Iout = Ki * integral / 32768
      *
-     * Desired Iout correction:
+     * Desired back-calculation output correction is:
      *     Kaw * delta / 32768
      *
-     * Therefore the integral-state correction is:
-     *     Kaw * delta / Ki
+     * Therefore:
+     *     correction = Kaw * delta / Ki
      */
-    correction = (int64_t)APP_FB_KAW * delta;
-    correction /= fb->param.ki;
+    correction = kaw * (int64_t)delta;
+    correction /= ki;
 
     /*
-     * Avoid a small correction disappearing forever due to
-     * integer truncation. Preserve at least one accumulator
-     * count when the requested correction is non-zero.
+     * Preserve a minimum one-count correction when integer
+     * division truncates a non-zero correction to zero.
      */
     if(correction == 0)
         correction = (delta > 0) ? 1 : -1;
 
-    fb->state.integral += (int32_t)correction;
+    /* Prevent the cast below from overflowing the integral state. */
+    if(correction > INT32_MAX)
+        correction = INT32_MAX;
+    else if(correction < INT32_MIN)
+        correction = INT32_MIN;
 
-    fb->state.integral = app_fb_pid_limit
-    (
-        fb->state.integral,
-        -fb->param.integral_limit,
-        fb->param.integral_limit
-    );
+    if(correction > (int64_t)(fb->param.integral_limit - fb->state.integral))
+        correction = (int64_t)fb->param.integral_limit - fb->state.integral;
+    else if(correction < (int64_t)(-fb->param.integral_limit - fb->state.integral))
+        correction = (int64_t)(-fb->param.integral_limit) - fb->state.integral;
+
+    fb->state.integral += (int32_t)correction;
 }
 
 void app_fb_pid_integral_add
