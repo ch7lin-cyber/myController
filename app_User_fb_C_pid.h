@@ -1,4 +1,3 @@
-
 /***************************************************************
 Description : 
 	This is a user User fb C program application header.
@@ -10,7 +9,7 @@ Change notice:
 Date-> 2026/05/13
 [ADD] 1. The first version sets up. 
 
-[MODIFY] 1. The first version sets up. 
+[MODIFY] 1. Add filtered derivative input to PID execute API.
 
 [DELETE] 1. The first version sets up. 
 
@@ -124,6 +123,7 @@ void app_fb_pid_reset
  Input:
  SV: 0.1℃
  PV: 0.1℃
+ D input: filtered dPV, 0.1℃ / sample
  Output: PID correction PWM -150 ~ +150
 ====================================================
 */
@@ -131,7 +131,8 @@ int32_t app_fb_pid_run
 (
     APP_FB_PID_T *fb,
     APP_FB_TEMP sv,
-    APP_FB_TEMP pv
+    APP_FB_TEMP pv,
+    int32_t d_filtered
 );
 
 /*
@@ -154,4 +155,3 @@ void app_fb_pid_integral_add
 #endif
 //------------------------------------------------------------------------------------//
 #endif  // SSM_STD_FB_APP_C_CONTROL_CODE_H_
-
