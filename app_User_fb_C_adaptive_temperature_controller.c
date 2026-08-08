@@ -1,10 +1,12 @@
 /***************************************************************
 Description : Adaptive temperature controller
 
-Step 6:
-[MODIFY] PID raw output is kept separate from actuator limits.
-[MODIFY] Hard PWM saturation is separated from output rate limiting.
-[MODIFY] Anti-windup uses hard PWM saturation only.
+Step 7:
+[MODIFY] 1. Base FF remains the table output and is independently bounded 0..1000.
+[MODIFY] 2. Learned FF offset is kept separate from the base FF output.
+[MODIFY] 3. Total command is base FF + learned offset + PID raw.
+[MODIFY] 4. Adaptive FF learning is disabled while hard PWM saturation is active.
+[MODIFY] 5. Rate limiting remains outside the saturation/learning decision.
 ***************************************************************/
 
 #include "ssm_std_define.h"
@@ -68,7 +70,8 @@ void app_fb_temperature_controller_run(
     const APP_FB_TEMP_CONTROLLER_INPUT_T *input,
     APP_FB_TEMP_CONTROLLER_OUTPUT_T *output)
 {
-    int32_t ff_pwm;
+    int32_t ff_base_pwm;
+    int32_t ff_offset;
     int32_t pid_raw;
     int32_t total_raw;
     int32_t pwm_limited;
@@ -102,10 +105,24 @@ void app_fb_temperature_controller_run(
     error = input->sv - input->pv;
     output->error = error;
 
-    /* 4. Feedforward. Keep FF independent from PID saturation. */
-    ff_pwm = app_fb_feedforward_run(&fb->ff, input->sv);
-    ff_pwm += app_fb_ff_learning_get_offset(&fb->learning);
-    output->ff_pwm = ff_pwm;
+    /*
+     * 4. Base Feedforward
+     *
+     * The table FF is the physical/model feedforward term. It is already
+     * bounded by the FF table FB to the actuator range 0..1000.
+     */
+    ff_base_pwm = app_fb_feedforward_run(&fb->ff, input->sv);
+    ff_base_pwm = APP_FB_LIMIT(ff_base_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+
+    /*
+     * Learned offset is deliberately kept separate from base FF.
+     * It is NOT clamped to 0..1000 here because it is a correction term
+     * that may be positive or negative and must be visible to total_raw.
+     */
+    ff_offset = app_fb_ff_learning_get_offset(&fb->learning);
+
+    output->ff_pwm = ff_base_pwm;
+    output->ff_offset = ff_offset;
 
     /* 5. Integral Separation */
     fb->pid.integral_enable = app_fb_integral_separation_run(&fb->i_sep, error);
@@ -117,33 +134,41 @@ void app_fb_temperature_controller_run(
     pid_raw = app_fb_pid_run(&fb->pid, input->sv, input->pv, d_filtered);
     output->pid_output = pid_raw;
 
-    /* 8. Combine FF + PID: this is the true unsaturated command. */
-    total_raw = ff_pwm + pid_raw;
-
     /*
-     * 9. Hard actuator limit only.
-     * Saturation error is preserved for anti-windup.
+     * 8. Combine all controller terms.
+     * This is the true unsaturated actuator command.
      */
+    total_raw = ff_base_pwm + ff_offset + pid_raw;
+
+    /* 9. Hard actuator limit. */
     pwm_limited = APP_FB_LIMIT(total_raw, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
 
     /*
-     * 10. Rate limit is a slew constraint, NOT a saturation source
-     * for the PID back-calculation loop.
+     * 10. Rate limit.
+     * This is a slew constraint and is intentionally not used as the
+     * saturation signal for either PID anti-windup or FF learning.
      */
     actual_pwm = app_fb_rate_limit_run(&fb->rate_limit, pwm_limited);
     output->pwm = actual_pwm;
 
     /*
-     * 11. Anti-Windup: hard PWM saturation only.
-     * Use the hard-limited command, not the rate-limited output.
-     *
-     * total_raw = 1050, pwm_limited = 1000, actual_pwm may be 630.
-     * Anti-windup sees 1000 - 1050 = -50, not 630 - 1050.
+     * 11. PID Anti-Windup.
+     * Only hard actuator saturation participates.
      */
     app_fb_pid_anti_windup(&fb->pid, total_raw, pwm_limited);
 
-    /* 12. Adaptive Learning */
-    app_fb_ff_learning_run(&fb->learning, input->sv, input->pv, pid_raw);
+    /*
+     * 12. Adaptive FF Learning.
+     * Do not learn when the total command is hard-saturated. In saturation,
+     * the measured PID correction cannot be interpreted as a pure FF error.
+     * Rate limiting alone does not block learning.
+     */
+    if(total_raw >= APP_FB_PWM_MIN && total_raw <= APP_FB_PWM_MAX)
+    {
+        app_fb_ff_learning_run(&fb->learning, input->sv, input->pv, pid_raw);
+    }
+
+    /* Return the latest learned offset after the learning update. */
     output->ff_offset = app_fb_ff_learning_get_offset(&fb->learning);
 
     fb->state = APP_FB_STATE_RUN;
