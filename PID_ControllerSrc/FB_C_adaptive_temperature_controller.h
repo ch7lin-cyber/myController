@@ -4,6 +4,7 @@ Description :
 
 Change notice:
 [ADD] MANUAL -> AUTO bumpless-transfer state.
+[MODIFY] Remove application wrapper API declarations from library header.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 #define SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
@@ -53,11 +54,19 @@ typedef struct
     APP_FB_BOOL manual_active;
 } APP_FB_TEMPERATURE_CONTROLLER_T;
 
-MY_API void app_fb_temperature_controller_init(APP_FB_TEMPERATURE_CONTROLLER_T *fb, const APP_FB_FF_POINT_T *ff_table, int32_t ff_size, const APP_FB_PID_PARAMETER_T *pid_parameter);
-MY_API void app_fb_temperature_controller_run(APP_FB_TEMPERATURE_CONTROLLER_T *fb, const APP_FB_TEMP_CONTROLLER_INPUT_T *input, APP_FB_TEMP_CONTROLLER_OUTPUT_T *output);
-MY_API void app_fb_temperature_controller_reset(APP_FB_TEMPERATURE_CONTROLLER_T *fb);
-MY_API void Heater_Control_Init(void);
-MY_API void Heater_myAdptiveControl(int16_t input_pv, int16_t input_sv, int32_t *output_pid_out, int32_t *output_ff_pwm, int32_t *output_ff_offset);
+MY_API void app_fb_temperature_controller_init(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter);
+
+MY_API void app_fb_temperature_controller_run(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_TEMP_CONTROLLER_INPUT_T *input,
+    APP_FB_TEMP_CONTROLLER_OUTPUT_T *output);
+
+MY_API void app_fb_temperature_controller_reset(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb);
 
 #ifdef __cplusplus
 }
