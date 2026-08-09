@@ -2,8 +2,8 @@
 #define SSM_STD_FB_APP_USER_FF_LEARNING_CODE_H_
 
 #include <stdint.h>
-#include "app_User_fb_C_control_type.h"
-#include "app_User_fb_C_parameter.h"
+#include "FB_C_control_type.h"
+#include "FB_C_parameter.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,7 +18,6 @@ typedef struct
     uint16_t stable_count;
     uint16_t freeze_count;
     int32_t offset_limit;
-
     uint32_t counter;
     int32_t offset;
     int32_t pid_sum;
@@ -30,22 +29,11 @@ typedef struct
     int64_t learn_accumulator;
 } APP_FB_FF_LEARNING_T;
 
-MY_API void app_fb_ff_learning_init(
-    APP_FB_FF_LEARNING_T *fb,
-    const APP_FB_ADAPTIVE_PARAMETER_T *param);
-
+MY_API void app_fb_ff_learning_init(APP_FB_FF_LEARNING_T *fb, const APP_FB_ADAPTIVE_PARAMETER_T *param);
 MY_API void app_fb_ff_learning_reset(APP_FB_FF_LEARNING_T *fb);
-
-MY_API int32_t app_fb_ff_learning_run(
-    APP_FB_FF_LEARNING_T *fb,
-    int32_t sv,
-    int32_t pv,
-    int32_t pid_output,
-    APP_FB_BOOL allow_learning);
-
+MY_API int32_t app_fb_ff_learning_run(APP_FB_FF_LEARNING_T *fb, int32_t sv, int32_t pv, int32_t pid_output, APP_FB_BOOL allow_learning);
 int32_t app_fb_ff_learning_get_offset(APP_FB_FF_LEARNING_T *fb);
 
-/* Backward-compatible aliases. */
 #define APP_FB_FF_ERROR_DEADBAND  APP_FB_ADAPTIVE_ERROR_DEADBAND
 #define APP_FB_FF_PID_DEADBAND    APP_FB_ADAPTIVE_PID_DEADBAND
 #define APP_FB_FF_STABLE_COUNT    APP_FB_ADAPTIVE_STABLE_COUNT
@@ -56,5 +44,4 @@ int32_t app_fb_ff_learning_get_offset(APP_FB_FF_LEARNING_T *fb);
 #ifdef __cplusplus
 }
 #endif
-
 #endif
