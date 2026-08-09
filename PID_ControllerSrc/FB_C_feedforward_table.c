@@ -14,7 +14,7 @@ static int32_t app_fb_ff_interpolation(int32_t x, int32_t x1, int32_t x2, int32_
     return (int32_t)result;
 }
 
-MY_API void app_fb_feedforward_init(APP_FB_FEEDFORWARD_T *fb, const APP_FB_FF_POINT_T *table, int32_t size)
+void app_fb_feedforward_init(APP_FB_FEEDFORWARD_T *fb, const APP_FB_FF_POINT_T *table, int32_t size)
 {
     if(fb == 0) return;
     fb->table = table;
@@ -22,7 +22,7 @@ MY_API void app_fb_feedforward_init(APP_FB_FEEDFORWARD_T *fb, const APP_FB_FF_PO
     fb->output = 0;
 }
 
-MY_API APP_FB_PWM app_fb_feedforward_run(APP_FB_FEEDFORWARD_T *fb, APP_FB_TEMP sv)
+APP_FB_PWM app_fb_feedforward_run(APP_FB_FEEDFORWARD_T *fb, APP_FB_TEMP sv)
 {
     int32_t i;
     int32_t pwm;
