@@ -1,12 +1,13 @@
 #ifndef SSM_STD_FB_APP_USER_C_PARAMETER_CODE_H_
 #define SSM_STD_FB_APP_USER_C_PARAMETER_CODE_H
 
+#include <stdint.h>
+#include "ssm_std_define.h"
+#include "FB_C_control_type.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "ssm_std_define.h"
-#include "FB_C_control_type.h"
 
 #define APP_FB_FF_TABLE_SIZE (12)
 
