@@ -90,7 +90,11 @@ static void app_fb_regression_finalize(APP_FB_AUTOTUNE_REGRESSION_RUNNER_T *fb)
     }
     else
     {
-        fb->metrics.steady_error = fb->cfg.sv - fb->max_pv;
+        /* Timeout fallback: report error at the closest directional extreme. */
+        if(fb->cfg.sv >= fb->initial_pv)
+            fb->metrics.steady_error = fb->cfg.sv - fb->max_pv;
+        else
+            fb->metrics.steady_error = fb->cfg.sv - fb->min_pv;
     }
 
     if(fb->sample_count > 0U)
@@ -155,7 +159,6 @@ APP_FB_AUTOTUNE_REGRESSION_STATUS_T app_fb_autotune_regression_run(
     int32_t error;
     int32_t abs_error;
     uint64_t elapsed_ms;
-    uint32_t steady_start_sample;
 
     if(fb == NULL) return APP_FB_AUTOTUNE_REGRESSION_ERROR;
     if(fb->status != APP_FB_AUTOTUNE_REGRESSION_RUNNING)
@@ -195,10 +198,8 @@ APP_FB_AUTOTUNE_REGRESSION_STATUS_T app_fb_autotune_regression_run(
     }
 
     /*
-     * Measure steady error from a trailing window. To keep this FB streaming
-     * and allocation-free, accumulate only after convergence is first reached.
-     * The test remains running until at least steady_window_count samples have
-     * been collected in the convergence band.
+     * Measure steady error after convergence. This FB is streaming and
+     * allocation-free, so it accumulates a bounded post-convergence window.
      */
     if(fb->converged == APP_FB_TRUE && abs_error <= fb->cfg.convergence_band)
     {
@@ -224,10 +225,6 @@ APP_FB_AUTOTUNE_REGRESSION_STATUS_T app_fb_autotune_regression_run(
         fb->status = APP_FB_AUTOTUNE_REGRESSION_TIMEOUT;
         return fb->status;
     }
-
-    /* Silence compiler warnings if future policies use this location. */
-    steady_start_sample = 0U;
-    (void)steady_start_sample;
 
     return fb->status;
 }
