@@ -45,6 +45,14 @@ typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_thresh
 #define APP_FB_ADAPTIVE_FREEZE_COUNT 250
 #define APP_FB_ADAPTIVE_OFFSET_LIMIT 200
 
+/* Runtime adaptive-learning validation limits. */
+#define APP_FB_ADAPTIVE_ERROR_MAX            (APP_FB_TEMP_MAX - APP_FB_TEMP_MIN)
+#define APP_FB_ADAPTIVE_GAIN_MAX             (APP_FB_Q15_ONE)
+#define APP_FB_ADAPTIVE_SV_CHANGE_MIN        (1)
+#define APP_FB_ADAPTIVE_SV_CHANGE_MAX        (APP_FB_TEMP_MAX - APP_FB_TEMP_MIN)
+#define APP_FB_ADAPTIVE_PID_DEADBAND_MAX     (APP_FB_PWM_MAX)
+#define APP_FB_ADAPTIVE_OFFSET_LIMIT_MAX     (APP_FB_PWM_MAX)
+
 //------------------------------------------------------------------------------------//
 // C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
