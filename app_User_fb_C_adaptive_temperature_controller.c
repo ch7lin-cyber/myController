@@ -76,6 +76,7 @@ MY_API void app_fb_temperature_controller_run(
     int32_t desired_pid_output;
     int64_t desired_pid_output64;
     int64_t total_raw64;
+    APP_FB_BOOL bumpless_transition;
 
     if(fb == 0 || input == 0 || output == 0) return;
 
@@ -140,6 +141,8 @@ MY_API void app_fb_temperature_controller_run(
      * current error, FF + learning offset + PID starts as close as
      * possible to the last manual PWM command.
      */
+    bumpless_transition = APP_FB_FALSE;
+
     if(fb->manual_active == APP_FB_TRUE)
     {
         /* Calculate in int64_t to avoid signed int32 overflow. */
@@ -162,6 +165,8 @@ MY_API void app_fb_temperature_controller_run(
             d_filtered,
             desired_pid_output);
 
+        /* Do not allow the preload/transient cycle to teach FF learning. */
+        bumpless_transition = APP_FB_TRUE;
         fb->manual_active = APP_FB_FALSE;
     }
     else
@@ -191,8 +196,24 @@ MY_API void app_fb_temperature_controller_run(
     /* 11. Anti-Windup uses hard saturation only. */
     app_fb_pid_anti_windup(&fb->pid, total_raw, pwm_limited);
 
-    /* 12. Adaptive Learning is gated inside the learning FB/controller. */
-    if(total_raw >= APP_FB_PWM_MIN && total_raw <= APP_FB_PWM_MAX)
+    /*
+     * 12. Adaptive Learning Gate.
+     *
+     * The learning FB already checks SV stability, temperature error and
+     * PID deadband. The controller additionally requires:
+     *   - no hard PWM saturation;
+     *   - no active output rate limiting;
+     *   - no MANUAL -> AUTO preload/transient cycle.
+     *
+     * Rate limiting is intentionally detected by comparing the limited
+     * command with the actual actuator command. A mismatch means the
+     * output slew constraint is active, so the observed transient must not
+     * be interpreted as a feedforward-model error.
+     */
+    if(total_raw >= APP_FB_PWM_MIN &&
+       total_raw <= APP_FB_PWM_MAX &&
+       actual_pwm == pwm_limited &&
+       bumpless_transition == APP_FB_FALSE)
     {
         app_fb_ff_learning_run(&fb->learning, input->sv, input->pv, pid_raw);
     }
