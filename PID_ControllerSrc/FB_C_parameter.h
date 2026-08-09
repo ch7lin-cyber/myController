@@ -31,7 +31,16 @@ typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_thresh
 #define APP_FB_PID_OUTPUT_LIMIT 800
 #define APP_FB_PID_KAW_DEFAULT 1638
 #define APP_FB_PID_AW_MAX_CORRECTION 300
-#define APP_FB_I_ENABLE_ERROR 20
+
+/* Integral approach-zone tuning (temperature unit = 0.1 degC).
+ * From large error, integral remains disabled until |error| <= 1.5 degC.
+ * Once enabled, the 0.5 degC hysteresis keeps it enabled until
+ * |error| >= 2.0 degC. This prevents aggressive integral accumulation
+ * while the plant is still approaching the setpoint.
+ */
+#define APP_FB_I_ENABLE_ERROR 15
+#define APP_FB_I_HYSTERESIS   5
+
 #define APP_FB_D_FILTER_ALPHA 28672
 #define APP_FB_PWM_RISE_LIMIT 30
 #define APP_FB_PWM_FALL_LIMIT 50
