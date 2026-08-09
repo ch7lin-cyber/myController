@@ -13,6 +13,12 @@ typedef struct
 {
     int32_t error_threshold;
     int32_t gain;
+    int32_t sv_change_threshold;
+    int32_t pid_deadband;
+    uint16_t stable_count;
+    uint16_t freeze_count;
+    int32_t offset_limit;
+
     uint32_t counter;
     int32_t offset;
     int32_t pid_sum;
@@ -21,15 +27,15 @@ typedef struct
     uint16_t freeze_counter;
     int32_t previous_sv;
     APP_FB_BOOL sv_initialized;
-
-    /* Fractional learning remainder in Q15 offset units. */
     int64_t learn_accumulator;
 } APP_FB_FF_LEARNING_T;
 
-MY_API void app_fb_ff_learning_init(APP_FB_FF_LEARNING_T *fb, const APP_FB_ADAPTIVE_PARAMETER_T *param);
+MY_API void app_fb_ff_learning_init(
+    APP_FB_FF_LEARNING_T *fb,
+    const APP_FB_ADAPTIVE_PARAMETER_T *param);
+
 MY_API void app_fb_ff_learning_reset(APP_FB_FF_LEARNING_T *fb);
 
-/* Execute once per controller cycle (50 Hz). */
 MY_API int32_t app_fb_ff_learning_run(
     APP_FB_FF_LEARNING_T *fb,
     int32_t sv,
@@ -39,11 +45,7 @@ MY_API int32_t app_fb_ff_learning_run(
 
 int32_t app_fb_ff_learning_get_offset(APP_FB_FF_LEARNING_T *fb);
 
-/*
- * Backward-compatible aliases.
- * New code should use APP_FB_ADAPTIVE_* definitions from
- * app_User_fb_C_parameter.h as the single source of truth.
- */
+/* Backward-compatible aliases. */
 #define APP_FB_FF_ERROR_DEADBAND  APP_FB_ADAPTIVE_ERROR_DEADBAND
 #define APP_FB_FF_PID_DEADBAND    APP_FB_ADAPTIVE_PID_DEADBAND
 #define APP_FB_FF_STABLE_COUNT    APP_FB_ADAPTIVE_STABLE_COUNT
