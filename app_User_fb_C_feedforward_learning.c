@@ -71,7 +71,8 @@ MY_API int32_t app_fb_ff_learning_run(
     APP_FB_FF_LEARNING_T *fb,
     int32_t sv,
     int32_t pv,
-    int32_t pid_output)
+    int32_t pid_output,
+    APP_FB_BOOL allow_learning)
 {
     int32_t error;
     int32_t avg_pid;
@@ -80,6 +81,11 @@ MY_API int32_t app_fb_ff_learning_run(
 
     if(fb == 0) return 0;
 
+    /*
+     * Context tracking is intentionally executed every 50 Hz controller
+     * cycle, even when the current sample is not eligible for learning.
+     * This keeps SV-change detection and freeze timing tied to real time.
+     */
     if(fb->sv_initialized == APP_FB_FALSE)
     {
         fb->previous_sv = sv;
@@ -99,10 +105,22 @@ MY_API int32_t app_fb_ff_learning_run(
         return fb->offset;
     }
 
-    /* 250 cycles at 50 Hz = 5 seconds. */
+    /* 250 real controller cycles at 50 Hz = 5 seconds. */
     if(fb->freeze_counter > 0)
     {
         fb->freeze_counter--;
+        app_fb_ff_learning_clear_window(fb);
+        return fb->offset;
+    }
+
+    /*
+     * Gate failures invalidate the current 1-second stable window but do
+     * not pause SV/freeze timing and do not discard same-direction
+     * fractional learning accumulated from previous valid windows.
+     */
+    if(allow_learning == APP_FB_FALSE)
+    {
+        app_fb_ff_learning_clear_window(fb);
         return fb->offset;
     }
 
@@ -143,19 +161,9 @@ MY_API int32_t app_fb_ff_learning_run(
      * Learning direction:
      *   positive PID -> heater needs more base power -> increase FF offset
      *   negative PID -> heater needs less base power -> decrease FF offset
-     *
-     * This makes the adaptive path negative feedback because a learned FF
-     * correction reduces the steady PID correction that created it.
      */
     learn_q15 = (int64_t)avg_pid * (int64_t)fb->gain;
 
-    /*
-     * If the required correction reverses direction, discard a residual
-     * fractional contribution from the old direction before accumulating
-     * new evidence. Without this, a near-one-count stale fraction can delay
-     * the first correction in the new direction for several 1-second
-     * learning windows.
-     */
     if((fb->learn_accumulator > 0 && learn_q15 < 0) ||
        (fb->learn_accumulator < 0 && learn_q15 > 0))
     {
@@ -178,10 +186,6 @@ MY_API int32_t app_fb_ff_learning_run(
 
         fb->offset = (int32_t)new_offset;
 
-        /*
-         * Once the offset hard limit is reached, any remaining fraction in
-         * the same direction cannot be applied and is discarded.
-         */
         if((fb->offset >= APP_FB_FF_OFFSET_LIMIT && fb->learn_accumulator > 0) ||
            (fb->offset <= -APP_FB_FF_OFFSET_LIMIT && fb->learn_accumulator < 0))
         {
@@ -192,7 +196,6 @@ MY_API int32_t app_fb_ff_learning_run(
     if(fb->counter != UINT32_MAX)
         fb->counter++;
 
-    /* Preserve learn_accumulator across valid, same-direction windows. */
     app_fb_ff_learning_clear_window(fb);
 
     return fb->offset;
