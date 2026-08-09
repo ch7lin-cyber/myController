@@ -13,9 +13,12 @@ Purpose:
 #include "ssm_std_define.h"
 #include "PID_ControllerSrc/FB_C_adaptive_temperature_controller.h"
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 extern "C" {
 #endif
+//------------------------------------------------------------------------------------//
 
 /* Backward-compatible initialization using default adaptive parameters. */
 MY_API void Heater_Control_Init(void);
@@ -31,8 +34,11 @@ MY_API void Heater_myAdptiveControl(
     int32_t *output_ff_pwm,
     int32_t *output_ff_offset);
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 }
 #endif
+//------------------------------------------------------------------------------------//
 
 #endif
