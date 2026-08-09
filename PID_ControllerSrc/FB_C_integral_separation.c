@@ -4,8 +4,6 @@
 extern "C" {
 #endif
 
-#define APP_FB_I_HYSTERESIS (5)
-
 void app_fb_integral_separation_init(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t threshold)
 {
     if(fb == 0) return;
