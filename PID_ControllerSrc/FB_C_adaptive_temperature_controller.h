@@ -6,6 +6,7 @@ Change notice:
 [ADD] MANUAL -> AUTO bumpless-transfer state.
 [MODIFY] Remove application wrapper API declarations from library header.
 [ADD] Runtime adaptive-learning parameter wiring via init_ex().
+[ADD] Runtime adaptive-learning reconfiguration API.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 #define SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
@@ -58,19 +59,21 @@ typedef struct
     APP_FB_BOOL manual_active;
 } APP_FB_TEMPERATURE_CONTROLLER_T;
 
-/* Backward-compatible initialization using default adaptive-learning values. */
 MY_API void app_fb_temperature_controller_init(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_FF_POINT_T *ff_table,
     int32_t ff_size,
     const APP_FB_PID_PARAMETER_T *pid_parameter);
 
-/* Extended initialization with per-instance adaptive-learning configuration. */
 MY_API void app_fb_temperature_controller_init_ex(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_FF_POINT_T *ff_table,
     int32_t ff_size,
     const APP_FB_PID_PARAMETER_T *pid_parameter,
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
+
+MY_API void app_fb_temperature_controller_set_adaptive_parameter(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
 
 MY_API void app_fb_temperature_controller_run(
