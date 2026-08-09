@@ -15,8 +15,8 @@ typedef struct
     APP_FB_BOOL enable;
 } APP_FB_INTEGRAL_SEPARATION_T;
 
-MY_API void app_fb_integral_separation_init(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t threshold);
-MY_API APP_FB_BOOL app_fb_integral_separation_run(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t error);
+void app_fb_integral_separation_init(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t threshold);
+APP_FB_BOOL app_fb_integral_separation_run(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t error);
 
 #ifdef __cplusplus
 }
