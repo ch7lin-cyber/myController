@@ -7,6 +7,7 @@ Change notice:
 [MODIFY] Remove application wrapper API declarations from library header.
 [ADD] Runtime adaptive-learning parameter wiring via init_ex().
 [ADD] Runtime adaptive-learning reconfiguration API.
+[ADD] Load-disturbance integral arming and SV-change tracking.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 #define SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
@@ -55,8 +56,11 @@ typedef struct
     APP_FB_RATE_LIMIT_T rate_limit;
     APP_FB_FF_LEARNING_T learning;
     int32_t previous_pwm;
+    APP_FB_TEMP previous_sv;
     APP_FB_STATE state;
     APP_FB_BOOL manual_active;
+    APP_FB_BOOL sv_initialized;
+    APP_FB_BOOL integral_disturbance_armed;
 } APP_FB_TEMPERATURE_CONTROLLER_T;
 
 MY_API void app_fb_temperature_controller_init(
