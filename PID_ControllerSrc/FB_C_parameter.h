@@ -34,12 +34,13 @@ typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_thresh
 
 /* Integral approach-zone tuning (temperature unit = 0.1 degC).
  * From large error, integral remains disabled until |error| <= 1.5 degC.
- * Once enabled, the 0.5 degC hysteresis keeps it enabled until
- * |error| >= 2.0 degC. This prevents aggressive integral accumulation
- * while the plant is still approaching the setpoint.
+ * Once the controller has entered this zone at a fixed SV, integral becomes
+ * disturbance-armed and remains available for later load rejection.
+ * A meaningful SV change clears the armed state and the old integral state.
  */
-#define APP_FB_I_ENABLE_ERROR 15
-#define APP_FB_I_HYSTERESIS   5
+#define APP_FB_I_ENABLE_ERROR        15
+#define APP_FB_I_HYSTERESIS           5
+#define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 #define APP_FB_D_FILTER_ALPHA 28672
 #define APP_FB_PWM_RISE_LIMIT 30
