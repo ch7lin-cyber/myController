@@ -13,6 +13,11 @@ static int32_t app_fb_controller_limit_i64(int64_t value, int32_t min_value, int
     return (int32_t)value;
 }
 
+static int64_t app_fb_controller_abs_i64(int64_t value)
+{
+    return (value >= 0) ? value : -value;
+}
+
 MY_API void app_fb_temperature_controller_init
 (
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
@@ -48,7 +53,10 @@ MY_API void app_fb_temperature_controller_init_ex
     app_fb_ff_learning_init(&fb->learning, adaptive_parameter);
 
     fb->previous_pwm = 0;
+    fb->previous_sv = 0;
     fb->manual_active = APP_FB_FALSE;
+    fb->sv_initialized = APP_FB_FALSE;
+    fb->integral_disturbance_armed = APP_FB_FALSE;
     fb->state = APP_FB_STATE_IDLE;
 }
 
@@ -82,7 +90,10 @@ MY_API void app_fb_temperature_controller_reset
     app_fb_ff_learning_reset(&fb->learning);
 
     fb->previous_pwm = 0;
+    fb->previous_sv = 0;
     fb->manual_active = APP_FB_FALSE;
+    fb->sv_initialized = APP_FB_FALSE;
+    fb->integral_disturbance_armed = APP_FB_FALSE;
     fb->state = APP_FB_STATE_IDLE;
 }
 
@@ -103,6 +114,7 @@ MY_API void app_fb_temperature_controller_run(
     int32_t desired_pid_output;
     int64_t desired_pid_output64;
     int64_t total_raw64;
+    int64_t sv_delta;
     APP_FB_BOOL bumpless_transition;
     APP_FB_BOOL learning_allowed;
 
@@ -121,7 +133,10 @@ MY_API void app_fb_temperature_controller_run(
         app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
         app_fb_rate_limit_reset(&fb->rate_limit, 0);
         fb->previous_pwm = 0;
+        fb->previous_sv = 0;
         fb->manual_active = APP_FB_FALSE;
+        fb->sv_initialized = APP_FB_FALSE;
+        fb->integral_disturbance_armed = APP_FB_FALSE;
         fb->state = APP_FB_STATE_IDLE;
         return;
     }
@@ -136,13 +151,37 @@ MY_API void app_fb_temperature_controller_run(
         app_fb_rate_limit_reset(&fb->rate_limit, manual_pwm_limited);
         output->pwm = manual_pwm_limited;
         fb->previous_pwm = output->pwm;
+        fb->previous_sv = input->sv;
+        fb->sv_initialized = APP_FB_TRUE;
+        fb->integral_disturbance_armed = APP_FB_FALSE;
         fb->manual_active = APP_FB_TRUE;
         fb->state = APP_FB_STATE_RUN;
         return;
     }
 
+    if(fb->sv_initialized == APP_FB_FALSE)
+    {
+        fb->previous_sv = input->sv;
+        fb->sv_initialized = APP_FB_TRUE;
+        fb->integral_disturbance_armed = APP_FB_FALSE;
+    }
+    else
+    {
+        sv_delta = (int64_t)input->sv - (int64_t)fb->previous_sv;
+        if(app_fb_controller_abs_i64(sv_delta) >= (int64_t)APP_FB_I_SV_CHANGE_THRESHOLD)
+        {
+            fb->previous_sv = input->sv;
+            fb->integral_disturbance_armed = APP_FB_FALSE;
+            app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
+            app_fb_pid_reset(&fb->pid);
+        }
+    }
+
     error = input->sv - input->pv;
     output->error = error;
+
+    if(app_fb_controller_abs_i64((int64_t)error) <= (int64_t)APP_FB_I_ENABLE_ERROR)
+        fb->integral_disturbance_armed = APP_FB_TRUE;
 
     ff_base_pwm = app_fb_feedforward_run(&fb->ff, input->sv);
     ff_offset = app_fb_ff_learning_get_offset(&fb->learning);
@@ -160,6 +199,13 @@ MY_API void app_fb_temperature_controller_run(
         app_fb_pid_bumpless_preload(&fb->pid, input->sv, input->pv, d_filtered, desired_pid_output);
         bumpless_transition = APP_FB_TRUE;
         fb->manual_active = APP_FB_FALSE;
+    }
+    else if(fb->integral_disturbance_armed == APP_FB_TRUE)
+    {
+        /* Once the fixed-SV loop has entered the approach zone, keep integral
+         * available for later load rejection even if the disturbance drives
+         * the error outside the normal separation threshold. */
+        fb->pid.integral_enable = APP_FB_TRUE;
     }
     else
     {
