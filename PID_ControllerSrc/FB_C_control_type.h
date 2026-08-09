@@ -5,6 +5,7 @@ Description :
 #ifndef SSM_STD_FB_APP_USER_C_TEST_CODE_H_
 #define SSM_STD_FB_APP_USER_C_TEST_CODE_H_
 
+#include <stdint.h>
 #include "ssm_std_define.h"
 
 #ifdef __cplusplus
