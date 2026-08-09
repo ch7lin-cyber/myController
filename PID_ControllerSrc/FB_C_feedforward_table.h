@@ -22,8 +22,8 @@ typedef struct
     APP_FB_PWM output;
 } APP_FB_FEEDFORWARD_T;
 
-MY_API void app_fb_feedforward_init(APP_FB_FEEDFORWARD_T *fb, const APP_FB_FF_POINT_T *table, int32_t size);
-MY_API APP_FB_PWM app_fb_feedforward_run(APP_FB_FEEDFORWARD_T *fb, APP_FB_TEMP sv);
+void app_fb_feedforward_init(APP_FB_FEEDFORWARD_T *fb, const APP_FB_FF_POINT_T *table, int32_t size);
+APP_FB_PWM app_fb_feedforward_run(APP_FB_FEEDFORWARD_T *fb, APP_FB_TEMP sv);
 
 #ifdef __cplusplus
 }
