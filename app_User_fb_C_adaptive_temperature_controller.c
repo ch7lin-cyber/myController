@@ -77,6 +77,7 @@ MY_API void app_fb_temperature_controller_run(
     int64_t desired_pid_output64;
     int64_t total_raw64;
     APP_FB_BOOL bumpless_transition;
+    APP_FB_BOOL learning_allowed;
 
     if(fb == 0 || input == 0 || output == 0) return;
 
@@ -109,7 +110,6 @@ MY_API void app_fb_temperature_controller_run(
         app_fb_d_filter_reset(&fb->d_filter);
         app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
 
-        /* Rate-limit state must start from the actual clamped manual output. */
         manual_pwm_limited =
             APP_FB_LIMIT(input->manual_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
         app_fb_rate_limit_reset(&fb->rate_limit, manual_pwm_limited);
@@ -135,17 +135,10 @@ MY_API void app_fb_temperature_controller_run(
     /* 5. Derivative Filter */
     d_filtered = app_fb_d_filter_run(&fb->d_filter, input->pv);
 
-    /*
-     * MANUAL -> AUTO bumpless transfer.
-     * The PID integral is preloaded so that, after pid_run() adds the
-     * current error, FF + learning offset + PID starts as close as
-     * possible to the last manual PWM command.
-     */
     bumpless_transition = APP_FB_FALSE;
 
     if(fb->manual_active == APP_FB_TRUE)
     {
-        /* Calculate in int64_t to avoid signed int32 overflow. */
         desired_pid_output64 =
             (int64_t)fb->previous_pwm -
             (int64_t)ff_base_pwm -
@@ -165,7 +158,6 @@ MY_API void app_fb_temperature_controller_run(
             d_filtered,
             desired_pid_output);
 
-        /* Do not allow the preload/transient cycle to teach FF learning. */
         bumpless_transition = APP_FB_TRUE;
         fb->manual_active = APP_FB_FALSE;
     }
@@ -198,25 +190,27 @@ MY_API void app_fb_temperature_controller_run(
 
     /*
      * 12. Adaptive Learning Gate.
-     *
-     * The learning FB already checks SV stability, temperature error and
-     * PID deadband. The controller additionally requires:
-     *   - no hard PWM saturation;
-     *   - no active output rate limiting;
-     *   - no MANUAL -> AUTO preload/transient cycle.
-     *
-     * Rate limiting is intentionally detected by comparing the limited
-     * command with the actual actuator command. A mismatch means the
-     * output slew constraint is active, so the observed transient must not
-     * be interpreted as a feedforward-model error.
+     * app_fb_ff_learning_run() is intentionally called every AUTO cycle so
+     * SV-change detection and the 5-second freeze timer remain tied to the
+     * real 50 Hz controller clock. learning_allowed only controls whether
+     * this sample may contribute to the stable learning window.
      */
+    learning_allowed = APP_FB_FALSE;
+
     if(total_raw >= APP_FB_PWM_MIN &&
        total_raw <= APP_FB_PWM_MAX &&
        actual_pwm == pwm_limited &&
        bumpless_transition == APP_FB_FALSE)
     {
-        app_fb_ff_learning_run(&fb->learning, input->sv, input->pv, pid_raw);
+        learning_allowed = APP_FB_TRUE;
     }
+
+    app_fb_ff_learning_run(
+        &fb->learning,
+        input->sv,
+        input->pv,
+        pid_raw,
+        learning_allowed);
 
     output->ff_offset = app_fb_ff_learning_get_offset(&fb->learning);
     fb->previous_pwm = actual_pwm;
