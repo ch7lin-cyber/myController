@@ -29,7 +29,7 @@ static void app_fb_ff_learning_clear_fraction(APP_FB_FF_LEARNING_T *fb)
     fb->learn_accumulator = 0;
 }
 
-MY_API void app_fb_ff_learning_init(APP_FB_FF_LEARNING_T *fb, const APP_FB_ADAPTIVE_PARAMETER_T *param)
+void app_fb_ff_learning_init(APP_FB_FF_LEARNING_T *fb, const APP_FB_ADAPTIVE_PARAMETER_T *param)
 {
     if(fb == 0) return;
     fb->error_threshold = APP_FB_ADAPTIVE_ERROR;
@@ -60,7 +60,7 @@ MY_API void app_fb_ff_learning_init(APP_FB_FF_LEARNING_T *fb, const APP_FB_ADAPT
     fb->learn_accumulator = 0;
 }
 
-MY_API void app_fb_ff_learning_reset(APP_FB_FF_LEARNING_T *fb)
+void app_fb_ff_learning_reset(APP_FB_FF_LEARNING_T *fb)
 {
     if(fb == 0) return;
     fb->offset = 0;
@@ -72,7 +72,7 @@ MY_API void app_fb_ff_learning_reset(APP_FB_FF_LEARNING_T *fb)
     app_fb_ff_learning_clear_window(fb);
 }
 
-MY_API int32_t app_fb_ff_learning_run(APP_FB_FF_LEARNING_T *fb, int32_t sv, int32_t pv, int32_t pid_output, APP_FB_BOOL allow_learning)
+int32_t app_fb_ff_learning_run(APP_FB_FF_LEARNING_T *fb, int32_t sv, int32_t pv, int32_t pid_output, APP_FB_BOOL allow_learning)
 {
     int32_t error;
     int32_t avg_pid;

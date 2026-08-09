@@ -6,7 +6,7 @@ extern "C" {
 
 #define APP_FB_I_HYSTERESIS (5)
 
-MY_API void app_fb_integral_separation_init(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t threshold)
+void app_fb_integral_separation_init(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t threshold)
 {
     if(fb == 0) return;
     if(threshold < 0) threshold = 0;
@@ -14,7 +14,7 @@ MY_API void app_fb_integral_separation_init(APP_FB_INTEGRAL_SEPARATION_T *fb, in
     fb->enable = APP_FB_FALSE;
 }
 
-MY_API APP_FB_BOOL app_fb_integral_separation_run(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t error)
+APP_FB_BOOL app_fb_integral_separation_run(APP_FB_INTEGRAL_SEPARATION_T *fb, int32_t error)
 {
     int32_t abs_error;
     if(fb == 0) return APP_FB_FALSE;

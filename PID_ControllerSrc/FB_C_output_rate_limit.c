@@ -11,7 +11,7 @@ static int32_t app_fb_rate_limit_clamp(int32_t value)
     return value;
 }
 
-MY_API void app_fb_rate_limit_init(APP_FB_RATE_LIMIT_T *fb, int32_t rise_limit, int32_t fall_limit)
+void app_fb_rate_limit_init(APP_FB_RATE_LIMIT_T *fb, int32_t rise_limit, int32_t fall_limit)
 {
     if(fb == 0) return;
     if(rise_limit < 0) rise_limit = 0;
@@ -22,7 +22,7 @@ MY_API void app_fb_rate_limit_init(APP_FB_RATE_LIMIT_T *fb, int32_t rise_limit, 
     fb->output = 0;
 }
 
-MY_API void app_fb_rate_limit_reset(APP_FB_RATE_LIMIT_T *fb, int32_t output)
+void app_fb_rate_limit_reset(APP_FB_RATE_LIMIT_T *fb, int32_t output)
 {
     if(fb == 0) return;
     output = app_fb_rate_limit_clamp(output);
@@ -30,7 +30,7 @@ MY_API void app_fb_rate_limit_reset(APP_FB_RATE_LIMIT_T *fb, int32_t output)
     fb->output = output;
 }
 
-MY_API APP_FB_PWM app_fb_rate_limit_run(APP_FB_RATE_LIMIT_T *fb, APP_FB_PWM input)
+APP_FB_PWM app_fb_rate_limit_run(APP_FB_RATE_LIMIT_T *fb, APP_FB_PWM input)
 {
     int32_t diff;
     if(fb == 0) return 0;
