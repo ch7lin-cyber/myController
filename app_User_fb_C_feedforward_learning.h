@@ -32,7 +32,22 @@ typedef struct
 
 MY_API void app_fb_ff_learning_init(APP_FB_FF_LEARNING_T *fb, const APP_FB_ADAPTIVE_PARAMETER_T *param);
 MY_API void app_fb_ff_learning_reset(APP_FB_FF_LEARNING_T *fb);
-MY_API int32_t app_fb_ff_learning_run(APP_FB_FF_LEARNING_T *fb, int32_t sv, int32_t pv, int32_t pid_output);
+
+/*
+ * Execute once per controller cycle (50 Hz).
+ *
+ * allow_learning controls whether the current sample may contribute to the
+ * learning window. SV-change detection and freeze timing are still updated
+ * even when allow_learning is FALSE, so APP_FB_FF_FREEZE_COUNT represents
+ * real controller cycles rather than only learning-eligible cycles.
+ */
+MY_API int32_t app_fb_ff_learning_run(
+    APP_FB_FF_LEARNING_T *fb,
+    int32_t sv,
+    int32_t pv,
+    int32_t pid_output,
+    APP_FB_BOOL allow_learning);
+
 int32_t app_fb_ff_learning_get_offset(APP_FB_FF_LEARNING_T *fb);
 
 #define APP_FB_FF_ERROR_DEADBAND (3)
