@@ -20,11 +20,12 @@ extern "C" {
 #endif
 //------------------------------------------------------------------------------------//
 
-/* Backward-compatible initialization using default adaptive parameters. */
 MY_API void Heater_Control_Init(void);
 
-/* Extended initialization with runtime adaptive-learning parameters. */
 MY_API void Heater_Control_InitEx(
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
+
+MY_API void Heater_SetAdaptiveParameter(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
 
 MY_API void Heater_myAdptiveControl(
