@@ -5,9 +5,12 @@
 #include "FB_C_control_type.h"
 #include "FB_C_parameter.h"
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 extern "C" {
 #endif
+//------------------------------------------------------------------------------------//
 
 typedef struct
 {
@@ -25,7 +28,11 @@ typedef struct
 void app_fb_feedforward_init(APP_FB_FEEDFORWARD_T *fb, const APP_FB_FF_POINT_T *table, int32_t size);
 APP_FB_PWM app_fb_feedforward_run(APP_FB_FEEDFORWARD_T *fb, APP_FB_TEMP sv);
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 }
 #endif
+//------------------------------------------------------------------------------------//
+
 #endif
