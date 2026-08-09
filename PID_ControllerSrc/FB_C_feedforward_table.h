@@ -1,6 +1,7 @@
 #ifndef SSM_STD_FB_APP_USER_FEEDFORWARD_TABLE_CODE_H_
 #define SSM_STD_FB_APP_USER_FEEDFORWARD_TABLE_CODE_H_
 
+#include <stdint.h>
 #include "FB_C_control_type.h"
 #include "FB_C_parameter.h"
 
