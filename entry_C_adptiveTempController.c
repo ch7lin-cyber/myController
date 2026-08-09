@@ -50,6 +50,14 @@ MY_API void Heater_Control_InitEx(
         adaptive_parameter);
 }
 
+MY_API void Heater_SetAdaptiveParameter(
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter)
+{
+    app_fb_temperature_controller_set_adaptive_parameter(
+        &heater_controller,
+        adaptive_parameter);
+}
+
 MY_API void Heater_myAdptiveControl(int16_t input_pv, int16_t input_sv, int32_t *output_pid_out, int32_t *output_ff_pwm, int32_t *output_ff_offset)
 {
     static APP_FB_TEMP_CONTROLLER_INPUT_T input;
