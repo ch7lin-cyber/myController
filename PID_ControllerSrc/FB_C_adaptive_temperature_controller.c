@@ -57,6 +57,7 @@ MY_API void app_fb_temperature_controller_init_ex
     fb->manual_active = APP_FB_FALSE;
     fb->sv_initialized = APP_FB_FALSE;
     fb->integral_disturbance_armed = APP_FB_FALSE;
+    fb->learning_enabled = APP_FB_TRUE;
     fb->state = APP_FB_STATE_IDLE;
 }
 
@@ -68,6 +69,35 @@ MY_API void app_fb_temperature_controller_set_adaptive_parameter
 {
     if(fb == 0) return;
     app_fb_ff_learning_reconfigure(&fb->learning, adaptive_parameter);
+}
+
+MY_API void app_fb_temperature_controller_set_pid_parameter
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_PID_PARAMETER_T *pid_parameter
+)
+{
+    if(fb == 0 || pid_parameter == 0) return;
+
+    /* Candidate changes must begin from a deterministic dynamic state. */
+    app_fb_pid_init(&fb->pid, pid_parameter);
+    app_fb_d_filter_reset(&fb->d_filter);
+    app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
+    fb->integral_disturbance_armed = APP_FB_FALSE;
+
+    /* Keep the actual output history for rate limiting so a PID update does
+       not force an artificial output step. */
+    app_fb_rate_limit_reset(&fb->rate_limit, fb->previous_pwm);
+}
+
+MY_API void app_fb_temperature_controller_set_learning_enabled
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    APP_FB_BOOL enabled
+)
+{
+    if(fb == 0) return;
+    fb->learning_enabled = (enabled != APP_FB_FALSE) ? APP_FB_TRUE : APP_FB_FALSE;
 }
 
 MY_API void app_fb_temperature_controller_reset
@@ -94,6 +124,7 @@ MY_API void app_fb_temperature_controller_reset
     fb->manual_active = APP_FB_FALSE;
     fb->sv_initialized = APP_FB_FALSE;
     fb->integral_disturbance_armed = APP_FB_FALSE;
+    fb->learning_enabled = APP_FB_TRUE;
     fb->state = APP_FB_STATE_IDLE;
 }
 
@@ -202,9 +233,6 @@ MY_API void app_fb_temperature_controller_run(
     }
     else if(fb->integral_disturbance_armed == APP_FB_TRUE)
     {
-        /* Once the fixed-SV loop has entered the approach zone, keep integral
-         * available for later load rejection even if the disturbance drives
-         * the error outside the normal separation threshold. */
         fb->pid.integral_enable = APP_FB_TRUE;
     }
     else
@@ -224,7 +252,8 @@ MY_API void app_fb_temperature_controller_run(
     app_fb_pid_anti_windup(&fb->pid, total_raw, pwm_limited);
 
     learning_allowed = APP_FB_FALSE;
-    if(total_raw >= APP_FB_PWM_MIN &&
+    if(fb->learning_enabled == APP_FB_TRUE &&
+       total_raw >= APP_FB_PWM_MIN &&
        total_raw <= APP_FB_PWM_MAX &&
        actual_pwm == pwm_limited &&
        bumpless_transition == APP_FB_FALSE)
