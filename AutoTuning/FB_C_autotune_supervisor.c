@@ -32,6 +32,35 @@ static APP_FB_BOOL app_fb_autotune_supervisor_config_valid(
     return APP_FB_TRUE;
 }
 
+static void app_fb_autotune_supervisor_zero_pid(APP_FB_PID_PARAMETER_T *pid)
+{
+    if(pid == NULL) return;
+    pid->kp = 0;
+    pid->ki = 0;
+    pid->kd = 0;
+    pid->integral_limit = 0;
+    pid->output_limit = 0;
+    pid->kaw = 0;
+}
+
+static void app_fb_autotune_supervisor_clear_runtime(
+    APP_FB_AUTOTUNE_SUPERVISOR_T *fb)
+{
+    if(fb == NULL) return;
+
+    fb->candidate_valid = APP_FB_FALSE;
+    fb->final_pid_valid = APP_FB_FALSE;
+    fb->last_reject_reason = APP_FB_AUTOTUNE_REJECT_NONE;
+
+    app_fb_autotune_supervisor_zero_pid(&fb->candidate_pid);
+    app_fb_autotune_supervisor_zero_pid(&fb->final_pid);
+
+    fb->gain_guard.current_scale_percent = 0U;
+    fb->gain_guard.attempt_count = 0U;
+    fb->gain_guard.status = APP_FB_AUTOTUNE_VALIDATION_FAIL;
+    fb->gain_guard.reject_reason = APP_FB_AUTOTUNE_REJECT_NONE;
+}
+
 static void app_fb_autotune_supervisor_clear_output(
     APP_FB_AUTOTUNE_SUPERVISOR_OUTPUT_T *output)
 {
@@ -42,14 +71,9 @@ static void app_fb_autotune_supervisor_clear_output(
     output->relay_pwm = 0;
     output->candidate_valid = APP_FB_FALSE;
     output->candidate_changed = APP_FB_FALSE;
-    output->candidate_pid.kp = 0;
-    output->candidate_pid.ki = 0;
-    output->candidate_pid.kd = 0;
-    output->candidate_pid.integral_limit = 0;
-    output->candidate_pid.output_limit = 0;
-    output->candidate_pid.kaw = 0;
+    app_fb_autotune_supervisor_zero_pid(&output->candidate_pid);
     output->final_pid_valid = APP_FB_FALSE;
-    output->final_pid = output->candidate_pid;
+    app_fb_autotune_supervisor_zero_pid(&output->final_pid);
     output->gain_scale_percent = 0U;
     output->attempt_count = 0U;
     output->last_reject_reason = APP_FB_AUTOTUNE_REJECT_NONE;
@@ -82,9 +106,7 @@ void app_fb_autotune_supervisor_init(
     fb->state = APP_FB_AUTOTUNE_SUPERVISOR_IDLE;
     fb->error = APP_FB_AUTOTUNE_SUPERVISOR_ERROR_NONE;
     fb->initialized = APP_FB_FALSE;
-    fb->candidate_valid = APP_FB_FALSE;
-    fb->final_pid_valid = APP_FB_FALSE;
-    fb->last_reject_reason = APP_FB_AUTOTUNE_REJECT_NONE;
+    app_fb_autotune_supervisor_clear_runtime(fb);
 
     if(cfg == NULL)
     {
@@ -125,9 +147,7 @@ void app_fb_autotune_supervisor_start(
         return;
     }
 
-    fb->candidate_valid = APP_FB_FALSE;
-    fb->final_pid_valid = APP_FB_FALSE;
-    fb->last_reject_reason = APP_FB_AUTOTUNE_REJECT_NONE;
+    app_fb_autotune_supervisor_clear_runtime(fb);
     fb->error = APP_FB_AUTOTUNE_SUPERVISOR_ERROR_NONE;
 
     app_fb_relay_autotune_init(&fb->relay, &fb->cfg.relay);
@@ -210,8 +230,9 @@ APP_FB_AUTOTUNE_SUPERVISOR_STATE_T app_fb_autotune_supervisor_run(
 
         case APP_FB_AUTOTUNE_SUPERVISOR_APPLY_CANDIDATE:
             /*
-             * This state deliberately consumes one full control cycle so the
-             * application can load candidate_pid before regression begins.
+             * Candidate was published on the previous cycle. The application
+             * has one full cycle to load candidate_pid before regression is
+             * armed here. No regression sample is consumed in this state.
              */
             app_fb_autotune_regression_init(
                 &fb->regression,
@@ -316,9 +337,7 @@ void app_fb_autotune_supervisor_abort(
     app_fb_relay_autotune_abort(&fb->relay);
     fb->state = APP_FB_AUTOTUNE_SUPERVISOR_IDLE;
     fb->error = APP_FB_AUTOTUNE_SUPERVISOR_ERROR_NONE;
-    fb->candidate_valid = APP_FB_FALSE;
-    fb->final_pid_valid = APP_FB_FALSE;
-    fb->last_reject_reason = APP_FB_AUTOTUNE_REJECT_NONE;
+    app_fb_autotune_supervisor_clear_runtime(fb);
 }
 
 APP_FB_AUTOTUNE_SUPERVISOR_ERROR_T app_fb_autotune_supervisor_get_error(
