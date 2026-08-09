@@ -139,7 +139,29 @@ MY_API int32_t app_fb_ff_learning_run(
 
     avg_pid = fb->pid_sum / (int32_t)fb->pid_count;
 
+    /*
+     * Learning direction:
+     *   positive PID -> heater needs more base power -> increase FF offset
+     *   negative PID -> heater needs less base power -> decrease FF offset
+     *
+     * This makes the adaptive path negative feedback because a learned FF
+     * correction reduces the steady PID correction that created it.
+     */
     learn_q15 = (int64_t)avg_pid * (int64_t)fb->gain;
+
+    /*
+     * If the required correction reverses direction, discard a residual
+     * fractional contribution from the old direction before accumulating
+     * new evidence. Without this, a near-one-count stale fraction can delay
+     * the first correction in the new direction for several 1-second
+     * learning windows.
+     */
+    if((fb->learn_accumulator > 0 && learn_q15 < 0) ||
+       (fb->learn_accumulator < 0 && learn_q15 > 0))
+    {
+        app_fb_ff_learning_clear_fraction(fb);
+    }
+
     fb->learn_accumulator += learn_q15;
 
     if(fb->learn_accumulator >= APP_FB_Q15_ONE ||
@@ -170,7 +192,7 @@ MY_API int32_t app_fb_ff_learning_run(
     if(fb->counter != UINT32_MAX)
         fb->counter++;
 
-    /* Preserve learn_accumulator across valid windows. */
+    /* Preserve learn_accumulator across valid, same-direction windows. */
     app_fb_ff_learning_clear_window(fb);
 
     return fb->offset;
