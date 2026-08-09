@@ -20,9 +20,12 @@ Change notice:
 #include "FB_C_output_rate_limit.h"
 #include "FB_C_feedforward_learning.h"
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 extern "C" {
 #endif
+//------------------------------------------------------------------------------------//
 
 typedef struct
 {
@@ -78,8 +81,11 @@ MY_API void app_fb_temperature_controller_run(
 MY_API void app_fb_temperature_controller_reset(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb);
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 }
 #endif
+//------------------------------------------------------------------------------------//
 
 #endif
