@@ -1,13 +1,16 @@
 #ifndef SSM_STD_FB_APP_USER_C_PARAMETER_CODE_H_
-#define SSM_STD_FB_APP_USER_C_PARAMETER_CODE_H
+#define SSM_STD_FB_APP_USER_C_PARAMETER_CODE_H_
 
 #include <stdint.h>
 #include "ssm_std_define.h"
 #include "FB_C_control_type.h"
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 extern "C" {
 #endif
+//------------------------------------------------------------------------------------//
 
 #define APP_FB_FF_TABLE_SIZE (12)
 
@@ -42,7 +45,11 @@ typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_thresh
 #define APP_FB_ADAPTIVE_FREEZE_COUNT 250
 #define APP_FB_ADAPTIVE_OFFSET_LIMIT 200
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 }
 #endif
+//------------------------------------------------------------------------------------//
+
 #endif
