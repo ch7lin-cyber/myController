@@ -5,9 +5,12 @@
 #include "FB_C_control_type.h"
 #include "FB_C_parameter.h"
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 extern "C" {
 #endif
+//------------------------------------------------------------------------------------//
 
 typedef struct { int32_t integral; int32_t error_previous; int32_t output; int64_t aw_remainder; } APP_FB_PID_STATE_T;
 typedef struct { APP_FB_PID_PARAMETER_T param; APP_FB_PID_STATE_T state; APP_FB_BOOL enable; APP_FB_BOOL integral_enable; } APP_FB_PID_T;
@@ -19,7 +22,11 @@ void app_fb_pid_bumpless_preload(APP_FB_PID_T *fb, APP_FB_TEMP sv, APP_FB_TEMP p
 void app_fb_pid_anti_windup(APP_FB_PID_T *fb, int32_t unsaturated_output, int32_t actual_output);
 void app_fb_pid_integral_add(APP_FB_PID_T *fb, int32_t value);
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 }
 #endif
+//------------------------------------------------------------------------------------//
+
 #endif
