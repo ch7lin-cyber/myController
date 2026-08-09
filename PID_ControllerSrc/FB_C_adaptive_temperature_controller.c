@@ -21,6 +21,23 @@ MY_API void app_fb_temperature_controller_init
     const APP_FB_PID_PARAMETER_T *pid_parameter
 )
 {
+    app_fb_temperature_controller_init_ex(
+        fb,
+        ff_table,
+        ff_size,
+        pid_parameter,
+        0);
+}
+
+MY_API void app_fb_temperature_controller_init_ex
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter,
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter
+)
+{
     if(fb == 0) return;
 
     app_fb_pid_init(&fb->pid, pid_parameter);
@@ -28,7 +45,7 @@ MY_API void app_fb_temperature_controller_init
     app_fb_d_filter_init(&fb->d_filter, APP_FB_D_FILTER_ALPHA);
     app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
     app_fb_rate_limit_init(&fb->rate_limit, APP_FB_PWM_RISE_LIMIT, APP_FB_PWM_FALL_LIMIT);
-    app_fb_ff_learning_init(&fb->learning, 0);
+    app_fb_ff_learning_init(&fb->learning, adaptive_parameter);
 
     fb->previous_pwm = 0;
     fb->manual_active = APP_FB_FALSE;
