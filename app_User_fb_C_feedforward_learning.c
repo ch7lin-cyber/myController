@@ -4,8 +4,6 @@
 extern "C" {
 #endif
 
-#define APP_FB_FF_SV_CHANGE         (5)
-
 static int32_t app_fb_ff_learning_limit(int32_t value)
 {
     if(value > APP_FB_FF_OFFSET_LIMIT) return APP_FB_FF_OFFSET_LIMIT;
@@ -105,7 +103,6 @@ MY_API int32_t app_fb_ff_learning_run(
         return fb->offset;
     }
 
-    /* 250 real controller cycles at 50 Hz = 5 seconds. */
     if(fb->freeze_counter > 0)
     {
         fb->freeze_counter--;
@@ -113,11 +110,6 @@ MY_API int32_t app_fb_ff_learning_run(
         return fb->offset;
     }
 
-    /*
-     * Gate failures invalidate the current 1-second stable window but do
-     * not pause SV/freeze timing and do not discard same-direction
-     * fractional learning accumulated from previous valid windows.
-     */
     if(allow_learning == APP_FB_FALSE)
     {
         app_fb_ff_learning_clear_window(fb);
@@ -138,10 +130,6 @@ MY_API int32_t app_fb_ff_learning_run(
         return fb->offset;
     }
 
-    /*
-     * pid_output is guaranteed to be within +/- APP_FB_FF_PID_DEADBAND
-     * here, so a 50-sample window cannot overflow int32_t pid_sum.
-     */
     fb->stable_counter++;
     fb->pid_sum += pid_output;
     fb->pid_count++;
@@ -157,11 +145,6 @@ MY_API int32_t app_fb_ff_learning_run(
 
     avg_pid = fb->pid_sum / (int32_t)fb->pid_count;
 
-    /*
-     * Learning direction:
-     *   positive PID -> heater needs more base power -> increase FF offset
-     *   negative PID -> heater needs less base power -> decrease FF offset
-     */
     learn_q15 = (int64_t)avg_pid * (int64_t)fb->gain;
 
     if((fb->learn_accumulator > 0 && learn_q15 < 0) ||
