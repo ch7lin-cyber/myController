@@ -52,6 +52,16 @@ MY_API void app_fb_temperature_controller_init_ex
     fb->state = APP_FB_STATE_IDLE;
 }
 
+MY_API void app_fb_temperature_controller_set_adaptive_parameter
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter
+)
+{
+    if(fb == 0) return;
+    app_fb_ff_learning_reconfigure(&fb->learning, adaptive_parameter);
+}
+
 MY_API void app_fb_temperature_controller_reset
 (
     APP_FB_TEMPERATURE_CONTROLLER_T *fb
