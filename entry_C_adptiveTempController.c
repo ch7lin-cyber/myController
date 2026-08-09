@@ -27,7 +27,9 @@ static const APP_FB_PID_PARAMETER_T heater_pid =
     .kp = 9000,
     .ki = 300,
     .kd = 5000,
-    .integral_limit = 5000,
+    /* Sustained-load capacity: Ki=300 with 32767 integral counts provides
+     * approximately +/-299 PWM counts of integral authority. */
+    .integral_limit = 32767,
     .output_limit = 450,
     .kaw = APP_FB_PID_KAW_DEFAULT
 };
