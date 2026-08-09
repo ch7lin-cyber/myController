@@ -8,9 +8,12 @@ Description :
 #include <stdint.h>
 #include "ssm_std_define.h"
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 extern "C" {
 #endif
+//------------------------------------------------------------------------------------//
 
 typedef int32_t APP_FB_INT32;
 typedef int64_t APP_FB_INT64;
@@ -33,7 +36,11 @@ typedef enum { APP_FB_OK = 0, APP_FB_ERROR_NULL_POINTER, APP_FB_ERROR_SENSOR, AP
 #define APP_FB_ABS(x) (((x)>=0)?(x):(-(x)))
 #define APP_FB_LIMIT(x,min,max) (((x)<(min))?(min):(((x)>(max))?(max):(x)))
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 }
 #endif
+//------------------------------------------------------------------------------------//
+
 #endif
