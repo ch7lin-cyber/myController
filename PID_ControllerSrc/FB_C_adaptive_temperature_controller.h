@@ -8,6 +8,8 @@ Change notice:
 [ADD] Runtime adaptive-learning parameter wiring via init_ex().
 [ADD] Runtime adaptive-learning reconfiguration API.
 [ADD] Load-disturbance integral arming and SV-change tracking.
+[ADD] Runtime PID parameter apply API for AutoTune candidate validation.
+[ADD] Runtime Adaptive Learning enable/disable API for AutoTune isolation.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 #define SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
@@ -61,6 +63,7 @@ typedef struct
     APP_FB_BOOL manual_active;
     APP_FB_BOOL sv_initialized;
     APP_FB_BOOL integral_disturbance_armed;
+    APP_FB_BOOL learning_enabled;
 } APP_FB_TEMPERATURE_CONTROLLER_T;
 
 MY_API void app_fb_temperature_controller_init(
@@ -79,6 +82,14 @@ MY_API void app_fb_temperature_controller_init_ex(
 MY_API void app_fb_temperature_controller_set_adaptive_parameter(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
+
+MY_API void app_fb_temperature_controller_set_pid_parameter(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_PID_PARAMETER_T *pid_parameter);
+
+MY_API void app_fb_temperature_controller_set_learning_enabled(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    APP_FB_BOOL enabled);
 
 MY_API void app_fb_temperature_controller_run(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
