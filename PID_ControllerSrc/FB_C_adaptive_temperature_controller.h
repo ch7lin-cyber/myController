@@ -8,6 +8,7 @@ Change notice:
 #ifndef SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 #define SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 
+#include <stdint.h>
 #include "FB_C_control_type.h"
 #include "FB_C_parameter.h"
 #include "FB_C_pid.h"
