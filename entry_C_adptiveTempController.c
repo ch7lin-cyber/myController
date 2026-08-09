@@ -8,16 +8,7 @@ Description :
 extern "C" {
 #endif
 
-#include "ssm_std_define.h"
-#include "PID_ControllerSrc/FB_C_control_type.h"
-#include "PID_ControllerSrc/FB_C_parameter.h"
-#include "PID_ControllerSrc/FB_C_pid.h"
-#include "PID_ControllerSrc/FB_C_feedforward_table.h"
-#include "PID_ControllerSrc/FB_C_derivative_filter.h"
-#include "PID_ControllerSrc/FB_C_integral_separation.h"
-#include "PID_ControllerSrc/FB_C_output_rate_limit.h"
-#include "PID_ControllerSrc/FB_C_feedforward_learning.h"
-#include "PID_ControllerSrc/FB_C_adaptive_temperature_controller.h"
+#include "entry_C_adptiveTempController.h"
 
 static const APP_FB_FF_POINT_T heater_ff_table[] =
 {
