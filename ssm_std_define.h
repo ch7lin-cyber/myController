@@ -9,6 +9,13 @@
 #include <stdbool.h>  /* NOLINT */
 #include <stdint.h>   /* NOLINT */
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
+#ifdef __cplusplus
+extern "C" {
+#endif
+//------------------------------------------------------------------------------------//
+
 #define SUCCESS 0x00000000
 #define FAIL    0x00000001
 
@@ -50,5 +57,12 @@ Static library, executable, MCU and other platforms:
     #define MY_API
 
 #endif
+
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
+#ifdef __cplusplus
+}
+#endif
+//------------------------------------------------------------------------------------//
 
 #endif  // SSM_STD_FB_DEFINE_H_
