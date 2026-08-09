@@ -31,7 +31,17 @@ typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_thresh
 #define APP_FB_PID_OUTPUT_LIMIT 800
 #define APP_FB_PID_KAW_DEFAULT 1638
 #define APP_FB_PID_AW_MAX_CORRECTION 300
-#define APP_FB_I_ENABLE_ERROR 20
+
+/* Integral approach-zone tuning (temperature unit = 0.1 degC).
+ * From large error, integral remains disabled until |error| <= 1.5 degC.
+ * Once the controller has entered this zone at a fixed SV, integral becomes
+ * disturbance-armed and remains available for later load rejection.
+ * A meaningful SV change clears the armed state and the old integral state.
+ */
+#define APP_FB_I_ENABLE_ERROR        15
+#define APP_FB_I_HYSTERESIS           5
+#define APP_FB_I_SV_CHANGE_THRESHOLD  5
+
 #define APP_FB_D_FILTER_ALPHA 28672
 #define APP_FB_PWM_RISE_LIMIT 30
 #define APP_FB_PWM_FALL_LIMIT 50
@@ -44,6 +54,14 @@ typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_thresh
 #define APP_FB_ADAPTIVE_STABLE_COUNT APP_FB_ADAPTIVE_PERIOD
 #define APP_FB_ADAPTIVE_FREEZE_COUNT 250
 #define APP_FB_ADAPTIVE_OFFSET_LIMIT 200
+
+/* Runtime adaptive-learning validation limits. */
+#define APP_FB_ADAPTIVE_ERROR_MAX            (APP_FB_TEMP_MAX - APP_FB_TEMP_MIN)
+#define APP_FB_ADAPTIVE_GAIN_MAX             (APP_FB_Q15_ONE)
+#define APP_FB_ADAPTIVE_SV_CHANGE_MIN        (1)
+#define APP_FB_ADAPTIVE_SV_CHANGE_MAX        (APP_FB_TEMP_MAX - APP_FB_TEMP_MIN)
+#define APP_FB_ADAPTIVE_PID_DEADBAND_MAX     (APP_FB_PWM_MAX)
+#define APP_FB_ADAPTIVE_OFFSET_LIMIT_MAX     (APP_FB_PWM_MAX)
 
 //------------------------------------------------------------------------------------//
 // C++ compatibility - DO NOT DELETE
