@@ -5,9 +5,12 @@
 #include "FB_C_control_type.h"
 #include "FB_C_parameter.h"
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 extern "C" {
 #endif
+//------------------------------------------------------------------------------------//
 
 typedef struct
 {
@@ -41,7 +44,11 @@ int32_t app_fb_ff_learning_get_offset(APP_FB_FF_LEARNING_T *fb);
 #define APP_FB_FF_OFFSET_LIMIT    APP_FB_ADAPTIVE_OFFSET_LIMIT
 #define APP_FB_FF_SV_CHANGE       APP_FB_ADAPTIVE_SV_CHANGE
 
+//------------------------------------------------------------------------------------//
+// C++ compatibility - DO NOT DELETE
 #ifdef __cplusplus
 }
 #endif
+//------------------------------------------------------------------------------------//
+
 #endif
