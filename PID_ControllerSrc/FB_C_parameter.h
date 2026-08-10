@@ -72,6 +72,22 @@ typedef struct
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
+ * Fast-heating boost for heater-only plants.
+ * It applies only when PV is below SV (positive error).
+ * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
+ *
+ * error <= 20.0C : normal FF + PID only
+ * error  = 20.0C : boost floor starts at 50% PWM
+ * error  = 80.0C : boost floor reaches 100% PWM
+ * between the two points the floor is linearly interpolated.
+ */
+#define APP_FB_FAST_HEAT_ENABLE             (1)
+#define APP_FB_FAST_HEAT_START_ERROR        (200)
+#define APP_FB_FAST_HEAT_FULL_ERROR         (800)
+#define APP_FB_FAST_HEAT_START_PWM          (500)
+#define APP_FB_FAST_HEAT_FULL_PWM           (1000)
+
+/*
  * Derivative LPF physical time constant.
  * Legacy alpha was 28672 (0.875) at Ts=20 ms.
  * tau=140 ms gives alpha=tau/(tau+Ts)=140/(140+20)=0.875,
