@@ -119,6 +119,7 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
     APP_FB_ERROR timing_status;
     APP_FB_ERROR pid_status;
     APP_FB_ERROR d_filter_status;
+    APP_FB_ERROR rate_limit_status;
 
     if(fb == 0 || timing_parameter == 0 || pid_parameter == 0)
         return APP_FB_ERROR_NULL_POINTER;
@@ -146,7 +147,15 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
         return d_filter_status;
 
     app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
-    app_fb_rate_limit_init(&fb->rate_limit, APP_FB_PWM_RISE_LIMIT, APP_FB_PWM_FALL_LIMIT);
+
+    rate_limit_status = app_fb_rate_limit_init_timed(
+        &fb->rate_limit,
+        fb->timing.sample_time_ms,
+        APP_FB_PWM_RISE_RATE_PER_SEC,
+        APP_FB_PWM_FALL_RATE_PER_SEC);
+    if(rate_limit_status != APP_FB_OK)
+        return rate_limit_status;
+
     app_fb_ff_learning_init(&fb->learning, adaptive_parameter);
 
     fb->previous_pwm = 0;
