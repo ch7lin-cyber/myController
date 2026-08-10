@@ -25,7 +25,12 @@ typedef struct
     uint32_t time_constant_ms;
 } APP_FB_D_FILTER_PARAMETER_T;
 
-typedef struct { int32_t rise_limit; int32_t fall_limit; } APP_FB_RATE_LIMIT_PARAMETER_T;
+typedef struct
+{
+    int32_t rise_rate_per_sec;
+    int32_t fall_rate_per_sec;
+} APP_FB_RATE_LIMIT_PARAMETER_T;
+
 typedef struct { int32_t kaw; } APP_FB_ANTI_WINDUP_PARAMETER_T;
 typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_threshold; int32_t pid_deadband; uint16_t stable_count; uint16_t freeze_count; int32_t offset_limit; } APP_FB_ADAPTIVE_PARAMETER_T;
 
@@ -64,8 +69,15 @@ typedef struct
  */
 #define APP_FB_D_FILTER_TIME_CONSTANT_MS  (140U)
 
-#define APP_FB_PWM_RISE_LIMIT 30
-#define APP_FB_PWM_FALL_LIMIT 50
+/*
+ * Output slew-rate limits are physical PWM counts per second.
+ * Legacy behavior at Ts=20 ms was +30 / -50 counts per cycle:
+ *   rise = 30 / 0.020 = 1500 counts/s
+ *   fall = 50 / 0.020 = 2500 counts/s
+ */
+#define APP_FB_PWM_RISE_RATE_PER_SEC  (1500)
+#define APP_FB_PWM_FALL_RATE_PER_SEC  (2500)
+
 #define APP_FB_KAW APP_FB_PID_KAW_DEFAULT
 #define APP_FB_ADAPTIVE_ERROR 10
 #define APP_FB_ADAPTIVE_GAIN 512
