@@ -2,14 +2,14 @@
 """Controller regression for SV=130.0 C with a 6-second sine-wave PV.
 
 PV range:
-    minimum = 99.0 C  (990)
+    minimum = 100.0 C (1000)
     maximum = 160.0 C (1600)
 SV:
     130.0 C (1300)
 
-The test logs pid_out, ff_pwm, ff_offset and heater_pwm for every controller
-sample. It is opt-in and runs only when PC_SIMULATION is defined in the
-environment.
+The test logs pid_out, ff_pwm, ff_offset, the diagnostic raw sum, and the
+controller's actual final heater PWM for every sample. It is opt-in and runs
+only when PC_SIMULATION is defined in the environment.
 """
 
 from __future__ import annotations
@@ -25,9 +25,9 @@ import subprocess
 import sys
 
 SAMPLE_TIME_MS = 20
-TEST_TIME_SEC = 12          # two complete 6-second sine periods
+TEST_TIME_SEC = 30          # five complete 6-second sine periods
 SINE_PERIOD_SEC = 6.0
-PV_MIN = 990
+PV_MIN = 1000
 PV_MAX = 1600
 SV_VALUE = 1300
 
@@ -148,6 +148,7 @@ def _load_api(path: pathlib.Path) -> ctypes.CDLL:
         ctypes.POINTER(ctypes.c_int32),
         ctypes.POINTER(ctypes.c_int32),
         ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_int32),
     ]
     lib.Heater_myAdptiveControl.restype = None
 
@@ -178,18 +179,18 @@ def _run(lib: ctypes.CDLL) -> pathlib.Path:
             "pid_out",
             "ff_pwm",
             "ff_offset",
-            "heater_pwm_raw",
-            "heater_pwm_clamped",
+            "raw_sum",
+            "controller_pwm",
         ])
 
         for i in range(sample_count):
-            # Start at the center point and rise toward the peak.
             angle = 2.0 * math.pi * i / samples_per_period
             pv = int(round(pv_center + pv_amplitude * math.sin(angle)))
 
             pid_out = ctypes.c_int32()
             ff_pwm = ctypes.c_int32()
             ff_offset = ctypes.c_int32()
+            heater_pwm = ctypes.c_int32()
 
             lib.Heater_myAdptiveControl(
                 ctypes.c_int16(pv),
@@ -197,10 +198,10 @@ def _run(lib: ctypes.CDLL) -> pathlib.Path:
                 ctypes.byref(pid_out),
                 ctypes.byref(ff_pwm),
                 ctypes.byref(ff_offset),
+                ctypes.byref(heater_pwm),
             )
 
-            heater_pwm_raw = pid_out.value + ff_pwm.value + ff_offset.value
-            heater_pwm_clamped = max(0, min(1000, heater_pwm_raw))
+            raw_sum = pid_out.value + ff_pwm.value + ff_offset.value
 
             writer.writerow([
                 i * SAMPLE_TIME_MS,
@@ -210,8 +211,8 @@ def _run(lib: ctypes.CDLL) -> pathlib.Path:
                 pid_out.value,
                 ff_pwm.value,
                 ff_offset.value,
-                heater_pwm_raw,
-                heater_pwm_clamped,
+                raw_sum,
+                heater_pwm.value,
             ])
 
     return output_path
