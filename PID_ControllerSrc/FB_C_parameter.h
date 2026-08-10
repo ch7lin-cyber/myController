@@ -19,29 +19,25 @@ typedef struct { APP_FB_TEMP temp[APP_FB_FF_TABLE_SIZE]; APP_FB_PWM pwm[APP_FB_F
 #define APP_FB_GAIN_ZONE_NUM (3)
 typedef struct { APP_FB_TEMP low; APP_FB_TEMP high; APP_FB_PID_PARAMETER_T pid; } APP_FB_GAIN_ZONE_T;
 typedef struct { int32_t enable_error; } APP_FB_INTEGRAL_SEPARATION_PARAMETER_T;
-typedef struct { int32_t alpha; } APP_FB_D_FILTER_PARAMETER_T;
+
+typedef struct
+{
+    uint32_t time_constant_ms;
+} APP_FB_D_FILTER_PARAMETER_T;
+
 typedef struct { int32_t rise_limit; int32_t fall_limit; } APP_FB_RATE_LIMIT_PARAMETER_T;
 typedef struct { int32_t kaw; } APP_FB_ANTI_WINDUP_PARAMETER_T;
 typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_threshold; int32_t pid_deadband; uint16_t stable_count; uint16_t freeze_count; int32_t offset_limit; } APP_FB_ADAPTIVE_PARAMETER_T;
 
 /*
  * Timing configuration is owned by the outer application layer.
- * It is supplied during initialization and remains fixed while RUNNING.
+ * Public unit is milliseconds because application schedulers/HMI parameters
+ * commonly use ms. The controller converts and stores this internally in us.
  */
 typedef struct
 {
     uint32_t sample_time_ms;
 } APP_FB_TIMING_PARAMETER_T;
-
-/*
- * Existing PID gains were tuned at 20 ms. They remain the public/reference
- * parameters so old parameter sets stay valid. B4-T2 derives runtime gains
- * from the configured scheduler period during initialization:
- *   Kp_runtime = Kp_reference
- *   Ki_runtime = Ki_reference * Ts / Tref
- *   Kd_runtime = Kd_reference * Tref / Ts
- */
-#define APP_FB_PID_REFERENCE_SAMPLE_TIME_MS  (20U)
 
 #define APP_FB_PID_KP_DEFAULT 32768
 #define APP_FB_PID_KI_DEFAULT 600
@@ -51,17 +47,23 @@ typedef struct
 #define APP_FB_PID_KAW_DEFAULT 1638
 #define APP_FB_PID_AW_MAX_CORRECTION 300
 
-/* Integral approach-zone tuning (temperature unit = 0.1 degC).
- * From large error, integral remains disabled until |error| <= 1.5 degC.
- * Once the controller has entered this zone at a fixed SV, integral becomes
- * disturbance-armed and remains available for later load rejection.
- * A meaningful SV change clears the armed state and the old integral state.
- */
+/* PID gains remain expressed using the legacy 20 ms reference convention.
+ * B4-T2 converts them once during initialization to runtime discrete gains. */
+#define APP_FB_PID_REFERENCE_SAMPLE_TIME_MS  (20U)
+
+/* Integral approach-zone tuning (temperature unit = 0.1 degC). */
 #define APP_FB_I_ENABLE_ERROR        15
 #define APP_FB_I_HYSTERESIS           5
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
-#define APP_FB_D_FILTER_ALPHA 28672
+/*
+ * Derivative LPF physical time constant.
+ * Legacy alpha was 28672 (0.875) at Ts=20 ms.
+ * tau=140 ms gives alpha=tau/(tau+Ts)=140/(140+20)=0.875,
+ * therefore preserving the original 20 ms behavior exactly.
+ */
+#define APP_FB_D_FILTER_TIME_CONSTANT_MS  (140U)
+
 #define APP_FB_PWM_RISE_LIMIT 30
 #define APP_FB_PWM_FALL_LIMIT 50
 #define APP_FB_KAW APP_FB_PID_KAW_DEFAULT
