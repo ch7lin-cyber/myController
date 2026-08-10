@@ -2,8 +2,8 @@
 """Controller regression for SV=130.0 C with a 6-second sine-wave PV.
 
 PV range:
-    minimum = 100.0 C (1000)
-    maximum = 160.0 C (1600)
+    minimum = 23.0 C (230)
+    maximum = 220.0 C (2200)
 SV:
     130.0 C (1300)
 
@@ -27,8 +27,8 @@ import sys
 SAMPLE_TIME_MS = 20
 TEST_TIME_SEC = 30          # five complete 6-second sine periods
 SINE_PERIOD_SEC = 6.0
-PV_MIN = 1000
-PV_MAX = 1600
+PV_MIN = 230
+PV_MAX = 2200
 SV_VALUE = 1300
 
 
