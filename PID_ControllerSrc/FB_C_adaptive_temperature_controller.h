@@ -9,6 +9,7 @@ Change notice:
 [ADD] Runtime adaptive-learning reconfiguration API.
 [ADD] Load-disturbance integral arming and SV-change tracking.
 [ADD] Initialization-only sample-time ownership from outer application layer.
+[ADD] Fast Heating Boost V2 hysteresis state.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 #define SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
@@ -66,6 +67,7 @@ typedef struct
     APP_FB_BOOL manual_active;
     APP_FB_BOOL sv_initialized;
     APP_FB_BOOL integral_disturbance_armed;
+    APP_FB_BOOL fast_heat_active;
 } APP_FB_TEMPERATURE_CONTROLLER_T;
 
 /* Legacy init: uses APP_FB_SAMPLE_TIME_DEFAULT_MS. */
