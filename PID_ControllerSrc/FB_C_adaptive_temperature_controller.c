@@ -44,12 +44,6 @@ static APP_FB_ERROR app_fb_controller_apply_sample_time(
     fb->timing.sample_time_ms = sample_time_ms;
     fb->sample_time_us = (uint32_t)sample_time_us;
 
-    /*
-     * B4-T1 only establishes timing ownership, validation and storage.
-     * PID gain rescaling, derivative-filter coefficient updates, rate-limit
-     * conversion and adaptive-learning time conversion are intentionally
-     * implemented in later timing-refactor steps.
-     */
     return APP_FB_OK;
 }
 
@@ -123,8 +117,9 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
 )
 {
     APP_FB_ERROR timing_status;
+    APP_FB_ERROR pid_status;
 
-    if(fb == 0 || timing_parameter == 0)
+    if(fb == 0 || timing_parameter == 0 || pid_parameter == 0)
         return APP_FB_ERROR_NULL_POINTER;
 
     timing_status = app_fb_controller_apply_sample_time(
@@ -133,7 +128,13 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
     if(timing_status != APP_FB_OK)
         return timing_status;
 
-    app_fb_pid_init(&fb->pid, pid_parameter);
+    pid_status = app_fb_pid_init_timed(
+        &fb->pid,
+        pid_parameter,
+        fb->timing.sample_time_ms);
+    if(pid_status != APP_FB_OK)
+        return pid_status;
+
     app_fb_feedforward_init(&fb->ff, ff_table, ff_size);
     app_fb_d_filter_init(&fb->d_filter, APP_FB_D_FILTER_ALPHA);
     app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
@@ -148,15 +149,6 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
     fb->state = APP_FB_STATE_IDLE;
 
     return APP_FB_OK;
-}
-
-MY_API APP_FB_ERROR app_fb_temperature_controller_set_sample_time_ms
-(
-    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
-    uint32_t sample_time_ms
-)
-{
-    return app_fb_controller_apply_sample_time(fb, sample_time_ms);
 }
 
 MY_API uint32_t app_fb_temperature_controller_get_sample_time_ms
@@ -214,7 +206,7 @@ MY_API void app_fb_temperature_controller_reset
     fb->state = APP_FB_STATE_IDLE;
 }
 
-/* Main Controller Execute: scheduling period is supplied by outer application. */
+/* Main Controller Execute: scheduling period is fixed by outer application at init. */
 MY_API void app_fb_temperature_controller_run(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_TEMP_CONTROLLER_INPUT_T *input,
