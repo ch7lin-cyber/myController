@@ -44,11 +44,6 @@ typedef struct
     int32_t offset_limit;
 } APP_FB_ADAPTIVE_PARAMETER_T;
 
-/*
- * Timing configuration is owned by the outer application layer.
- * Public unit is milliseconds because application schedulers/HMI parameters
- * commonly use ms. The controller converts and stores this internally in us.
- */
 typedef struct
 {
     uint32_t sample_time_ms;
@@ -62,45 +57,37 @@ typedef struct
 #define APP_FB_PID_KAW_DEFAULT 1638
 #define APP_FB_PID_AW_MAX_CORRECTION 300
 
-/* PID gains remain expressed using the legacy 20 ms reference convention.
- * B4-T2 converts them once during initialization to runtime discrete gains. */
 #define APP_FB_PID_REFERENCE_SAMPLE_TIME_MS  (20U)
 
-/* Integral approach-zone tuning (temperature unit = 0.1 degC). */
 #define APP_FB_I_ENABLE_ERROR        15
 #define APP_FB_I_HYSTERESIS           5
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
- * Fast-heating boost for heater-only plants.
- * It applies only when PV is below SV (positive error).
+ * Fast Heating Boost V2 for heater-only plants.
  * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
  *
- * error <= 20.0C : normal FF + PID only
- * error  = 20.0C : boost floor starts at 50% PWM
- * error  = 80.0C : boost floor reaches 100% PWM
- * between the two points the floor is linearly interpolated.
+ * Hysteresis:
+ *   enter boost state when error >= +20.0C
+ *   leave boost state when error <= +15.0C
+ *
+ * Smooth blend:
+ *   error <= +20.0C -> 0% boost contribution
+ *   +20.0C..+80.0C -> smoothstep blend from normal FF+PID toward full PWM
+ *   error >= +80.0C -> 100% PWM target
+ *
+ * This removes the V1 discontinuity where crossing +20.0C immediately
+ * imposed a fixed 50% PWM floor.
  */
 #define APP_FB_FAST_HEAT_ENABLE             (1)
-#define APP_FB_FAST_HEAT_START_ERROR        (200)
+#define APP_FB_FAST_HEAT_ENTER_ERROR        (200)
+#define APP_FB_FAST_HEAT_EXIT_ERROR         (150)
 #define APP_FB_FAST_HEAT_FULL_ERROR         (800)
-#define APP_FB_FAST_HEAT_START_PWM          (500)
 #define APP_FB_FAST_HEAT_FULL_PWM           (1000)
+#define APP_FB_FAST_HEAT_BLEND_SCALE        (32768)
 
-/*
- * Derivative LPF physical time constant.
- * Legacy alpha was 28672 (0.875) at Ts=20 ms.
- * tau=140 ms gives alpha=tau/(tau+Ts)=140/(140+20)=0.875,
- * therefore preserving the original 20 ms behavior exactly.
- */
 #define APP_FB_D_FILTER_TIME_CONSTANT_MS  (140U)
 
-/*
- * Output slew-rate limits are physical PWM counts per second.
- * Legacy behavior at Ts=20 ms was +30 / -50 counts per cycle:
- *   rise = 30 / 0.020 = 1500 counts/s
- *   fall = 50 / 0.020 = 2500 counts/s
- */
 #define APP_FB_PWM_RISE_RATE_PER_SEC  (1500)
 #define APP_FB_PWM_FALL_RATE_PER_SEC  (2500)
 
@@ -111,24 +98,17 @@ typedef struct
 #define APP_FB_ADAPTIVE_PID_DEADBAND 10
 #define APP_FB_ADAPTIVE_ERROR_DEADBAND 3
 
-/*
- * Adaptive-learning timing is expressed in physical milliseconds.
- * Legacy Ts=20 ms behavior:
- *   stable_count = 50  -> 1000 ms
- *   freeze_count = 250 -> 5000 ms
- */
 #define APP_FB_ADAPTIVE_STABLE_TIME_MS  (1000U)
 #define APP_FB_ADAPTIVE_FREEZE_TIME_MS  (5000U)
 #define APP_FB_ADAPTIVE_OFFSET_LIMIT 200
 
-/* Runtime adaptive-learning validation limits. */
 #define APP_FB_ADAPTIVE_ERROR_MAX            (APP_FB_TEMP_MAX - APP_FB_TEMP_MIN)
 #define APP_FB_ADAPTIVE_GAIN_MAX             (APP_FB_Q15_ONE)
 #define APP_FB_ADAPTIVE_SV_CHANGE_MIN        (1)
 #define APP_FB_ADAPTIVE_SV_CHANGE_MAX        (APP_FB_TEMP_MAX - APP_FB_TEMP_MIN)
 #define APP_FB_ADAPTIVE_PID_DEADBAND_MAX     (APP_FB_PWM_MAX)
 #define APP_FB_ADAPTIVE_OFFSET_LIMIT_MAX     (APP_FB_PWM_MAX)
-#define APP_FB_ADAPTIVE_TIME_MAX_MS          (86400000U) /* 24 h guard */
+#define APP_FB_ADAPTIVE_TIME_MAX_MS          (86400000U)
 
 //------------------------------------------------------------------------------------//
 // C++ compatibility - DO NOT DELETE
