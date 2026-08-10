@@ -1,6 +1,11 @@
 /***************************************************************
 Description :
-    This is a user C test Main program application.
+    Application wrapper for the adaptive temperature controller.
+
+Timing policy:
+    The outer scheduler/application owns the execution period.
+    sample_time_ms is supplied only during controller initialization and must
+    remain fixed while the controller is running.
 ***************************************************************/
 
 #ifdef __cplusplus
@@ -36,11 +41,13 @@ static const APP_FB_PID_PARAMETER_T heater_pid =
 
 APP_FB_TEMPERATURE_CONTROLLER_T heater_controller;
 
+/* Legacy/default initialization retained for source compatibility. */
 MY_API void Heater_Control_Init(void)
 {
     (void)Heater_Control_InitExTimed(0, APP_FB_SAMPLE_TIME_DEFAULT_MS);
 }
 
+/* Legacy/default initialization retained for source compatibility. */
 MY_API void Heater_Control_InitEx(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter)
 {
@@ -49,11 +56,13 @@ MY_API void Heater_Control_InitEx(
         APP_FB_SAMPLE_TIME_DEFAULT_MS);
 }
 
+/* Preferred initialization: the outer application supplies its fixed period. */
 MY_API APP_FB_ERROR Heater_Control_InitTimed(uint32_t sample_time_ms)
 {
     return Heater_Control_InitExTimed(0, sample_time_ms);
 }
 
+/* Preferred extended initialization. sample_time_ms is initialization-only. */
 MY_API APP_FB_ERROR Heater_Control_InitExTimed(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter,
     uint32_t sample_time_ms)
@@ -105,8 +114,11 @@ MY_API void Heater_myAdptiveControl(int16_t input_pv, int16_t input_sv, int32_t 
     *output_ff_offset = output.ff_offset;
 }
 
-#define PC_SIMULATION
-
+/*
+ * Optional PC-only simulation harness.
+ * Do NOT define PC_SIMULATION in this source file. The build system/test target
+ * must define it explicitly so production/library builds never export main().
+ */
 #ifdef PC_SIMULATION
 #include <stdio.h>
 #include <stdint.h>
