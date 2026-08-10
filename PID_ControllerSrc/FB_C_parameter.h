@@ -32,7 +32,17 @@ typedef struct
 } APP_FB_RATE_LIMIT_PARAMETER_T;
 
 typedef struct { int32_t kaw; } APP_FB_ANTI_WINDUP_PARAMETER_T;
-typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_threshold; int32_t pid_deadband; uint16_t stable_count; uint16_t freeze_count; int32_t offset_limit; } APP_FB_ADAPTIVE_PARAMETER_T;
+
+typedef struct
+{
+    int32_t error_threshold;
+    int32_t gain;
+    int32_t sv_change_threshold;
+    int32_t pid_deadband;
+    uint32_t stable_time_ms;
+    uint32_t freeze_time_ms;
+    int32_t offset_limit;
+} APP_FB_ADAPTIVE_PARAMETER_T;
 
 /*
  * Timing configuration is owned by the outer application layer.
@@ -84,8 +94,15 @@ typedef struct
 #define APP_FB_ADAPTIVE_SV_CHANGE 5
 #define APP_FB_ADAPTIVE_PID_DEADBAND 10
 #define APP_FB_ADAPTIVE_ERROR_DEADBAND 3
-#define APP_FB_ADAPTIVE_STABLE_COUNT APP_FB_ADAPTIVE_PERIOD
-#define APP_FB_ADAPTIVE_FREEZE_COUNT 250
+
+/*
+ * Adaptive-learning timing is expressed in physical milliseconds.
+ * Legacy Ts=20 ms behavior:
+ *   stable_count = 50  -> 1000 ms
+ *   freeze_count = 250 -> 5000 ms
+ */
+#define APP_FB_ADAPTIVE_STABLE_TIME_MS  (1000U)
+#define APP_FB_ADAPTIVE_FREEZE_TIME_MS  (5000U)
 #define APP_FB_ADAPTIVE_OFFSET_LIMIT 200
 
 /* Runtime adaptive-learning validation limits. */
@@ -95,6 +112,7 @@ typedef struct
 #define APP_FB_ADAPTIVE_SV_CHANGE_MAX        (APP_FB_TEMP_MAX - APP_FB_TEMP_MIN)
 #define APP_FB_ADAPTIVE_PID_DEADBAND_MAX     (APP_FB_PWM_MAX)
 #define APP_FB_ADAPTIVE_OFFSET_LIMIT_MAX     (APP_FB_PWM_MAX)
+#define APP_FB_ADAPTIVE_TIME_MAX_MS          (86400000U) /* 24 h guard */
 
 //------------------------------------------------------------------------------------//
 // C++ compatibility - DO NOT DELETE
