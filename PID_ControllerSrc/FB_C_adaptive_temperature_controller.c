@@ -18,6 +18,56 @@ static int64_t app_fb_controller_abs_i64(int64_t value)
     return (value >= 0) ? value : -value;
 }
 
+static APP_FB_BOOL app_fb_controller_fast_heat_target(
+    int32_t error,
+    int32_t *target_pwm)
+{
+#if APP_FB_FAST_HEAT_ENABLE
+    int64_t numerator;
+    int64_t denominator;
+    int64_t target;
+
+    if(target_pwm == 0) return APP_FB_FALSE;
+
+    if(error < APP_FB_FAST_HEAT_START_ERROR)
+        return APP_FB_FALSE;
+
+    if(error >= APP_FB_FAST_HEAT_FULL_ERROR)
+    {
+        *target_pwm = APP_FB_LIMIT(
+            APP_FB_FAST_HEAT_FULL_PWM,
+            APP_FB_PWM_MIN,
+            APP_FB_PWM_MAX);
+        return APP_FB_TRUE;
+    }
+
+    denominator = (int64_t)APP_FB_FAST_HEAT_FULL_ERROR -
+                  (int64_t)APP_FB_FAST_HEAT_START_ERROR;
+
+    if(denominator <= 0)
+        return APP_FB_FALSE;
+
+    numerator = ((int64_t)APP_FB_FAST_HEAT_FULL_PWM -
+                 (int64_t)APP_FB_FAST_HEAT_START_PWM) *
+                ((int64_t)error -
+                 (int64_t)APP_FB_FAST_HEAT_START_ERROR);
+
+    target = (int64_t)APP_FB_FAST_HEAT_START_PWM +
+             (numerator / denominator);
+
+    *target_pwm = app_fb_controller_limit_i64(
+        target,
+        APP_FB_PWM_MIN,
+        APP_FB_PWM_MAX);
+
+    return APP_FB_TRUE;
+#else
+    (void)error;
+    (void)target_pwm;
+    return APP_FB_FALSE;
+#endif
+}
+
 static APP_FB_BOOL app_fb_controller_sample_time_valid(uint32_t sample_time_ms)
 {
     if(sample_time_ms < APP_FB_SAMPLE_TIME_MIN_MS) return APP_FB_FALSE;
@@ -242,7 +292,9 @@ MY_API void app_fb_temperature_controller_run(
     int32_t ff_offset;
     int32_t pid_raw;
     int32_t total_raw;
-    int32_t pwm_limited;
+    int32_t pid_limited_pwm;
+    int32_t target_pwm;
+    int32_t boost_pwm;
     int32_t actual_pwm;
     int32_t error;
     int32_t d_filtered;
@@ -252,6 +304,7 @@ MY_API void app_fb_temperature_controller_run(
     int64_t sv_delta;
     APP_FB_BOOL bumpless_transition;
     APP_FB_BOOL learning_allowed;
+    APP_FB_BOOL fast_heat_active;
 
     if(fb == 0 || input == 0 || output == 0) return;
 
@@ -315,6 +368,8 @@ MY_API void app_fb_temperature_controller_run(
     error = input->sv - input->pv;
     output->error = error;
 
+    fast_heat_active = app_fb_controller_fast_heat_target(error, &boost_pwm);
+
     if(app_fb_controller_abs_i64((int64_t)error) <= (int64_t)APP_FB_I_ENABLE_ERROR)
         fb->integral_disturbance_armed = APP_FB_TRUE;
 
@@ -335,6 +390,11 @@ MY_API void app_fb_temperature_controller_run(
         bumpless_transition = APP_FB_TRUE;
         fb->manual_active = APP_FB_FALSE;
     }
+    else if(fast_heat_active == APP_FB_TRUE)
+    {
+        /* Boost is a temporary feed-forward floor. Do not accumulate I while it is active. */
+        fb->pid.integral_enable = APP_FB_FALSE;
+    }
     else if(fb->integral_disturbance_armed == APP_FB_TRUE)
     {
         fb->pid.integral_enable = APP_FB_TRUE;
@@ -349,16 +409,25 @@ MY_API void app_fb_temperature_controller_run(
 
     total_raw64 = (int64_t)ff_base_pwm + (int64_t)ff_offset + (int64_t)pid_raw;
     total_raw = app_fb_controller_limit_i64(total_raw64, INT32_MIN, INT32_MAX);
-    pwm_limited = APP_FB_LIMIT(total_raw, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
-    actual_pwm = app_fb_rate_limit_run(&fb->rate_limit, pwm_limited);
+
+    /* Normal PID/FF command and its saturation are kept separate from boost. */
+    pid_limited_pwm = APP_FB_LIMIT(total_raw, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+    target_pwm = pid_limited_pwm;
+
+    if(fast_heat_active == APP_FB_TRUE && boost_pwm > target_pwm)
+        target_pwm = boost_pwm;
+
+    actual_pwm = app_fb_rate_limit_run(&fb->rate_limit, target_pwm);
     output->pwm = actual_pwm;
 
-    app_fb_pid_anti_windup(&fb->pid, total_raw, pwm_limited);
+    /* Anti-windup belongs to PID saturation only; boost is not saturation. */
+    app_fb_pid_anti_windup(&fb->pid, total_raw, pid_limited_pwm);
 
     learning_allowed = APP_FB_FALSE;
-    if(total_raw >= APP_FB_PWM_MIN &&
+    if(fast_heat_active == APP_FB_FALSE &&
+       total_raw >= APP_FB_PWM_MIN &&
        total_raw <= APP_FB_PWM_MAX &&
-       actual_pwm == pwm_limited &&
+       actual_pwm == pid_limited_pwm &&
        bumpless_transition == APP_FB_FALSE)
     {
         learning_allowed = APP_FB_TRUE;
