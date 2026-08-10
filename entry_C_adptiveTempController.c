@@ -38,18 +38,50 @@ APP_FB_TEMPERATURE_CONTROLLER_T heater_controller;
 
 MY_API void Heater_Control_Init(void)
 {
-    Heater_Control_InitEx(0);
+    (void)Heater_Control_InitExTimed(0, APP_FB_SAMPLE_TIME_DEFAULT_MS);
 }
 
 MY_API void Heater_Control_InitEx(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter)
 {
-    app_fb_temperature_controller_init_ex(
+    (void)Heater_Control_InitExTimed(
+        adaptive_parameter,
+        APP_FB_SAMPLE_TIME_DEFAULT_MS);
+}
+
+MY_API APP_FB_ERROR Heater_Control_InitTimed(uint32_t sample_time_ms)
+{
+    return Heater_Control_InitExTimed(0, sample_time_ms);
+}
+
+MY_API APP_FB_ERROR Heater_Control_InitExTimed(
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter,
+    uint32_t sample_time_ms)
+{
+    APP_FB_TIMING_PARAMETER_T timing;
+
+    timing.sample_time_ms = sample_time_ms;
+
+    return app_fb_temperature_controller_init_ex_timed(
         &heater_controller,
         heater_ff_table,
         (int32_t)(sizeof(heater_ff_table) / sizeof(APP_FB_FF_POINT_T)),
         &heater_pid,
-        adaptive_parameter);
+        adaptive_parameter,
+        &timing);
+}
+
+MY_API APP_FB_ERROR Heater_SetSampleTimeMs(uint32_t sample_time_ms)
+{
+    return app_fb_temperature_controller_set_sample_time_ms(
+        &heater_controller,
+        sample_time_ms);
+}
+
+MY_API uint32_t Heater_GetSampleTimeMs(void)
+{
+    return app_fb_temperature_controller_get_sample_time_ms(
+        &heater_controller);
 }
 
 MY_API void Heater_SetAdaptiveParameter(
@@ -120,7 +152,12 @@ int main(void)
 
     fprintf(fp, "time_ms,pv,sv,error,pid_out,ff_pwm,ff_offset,total_output\n");
 
-    Heater_Control_Init();
+    if(Heater_Control_InitTimed(SAMPLE_TIME_MS) != APP_FB_OK)
+    {
+        printf("Invalid sample time: %d ms\n", SAMPLE_TIME_MS);
+        fclose(fp);
+        return -2;
+    }
 
     pv_center = (PV_MAX + PV_MIN) / 2.0;
     pv_amp = (PV_MAX - PV_MIN) / 2.0;
@@ -149,6 +186,7 @@ int main(void)
     printf("Simulation completed.\n");
     printf("Output file : simulation.csv\n");
     printf("Samples     : %d\n", SAMPLE_COUNT);
+    printf("Sample time : %lu ms\n", (unsigned long)Heater_GetSampleTimeMs());
 
     return 0;
 }
