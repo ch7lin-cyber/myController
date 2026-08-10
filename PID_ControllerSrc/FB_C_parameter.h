@@ -24,6 +24,16 @@ typedef struct { int32_t rise_limit; int32_t fall_limit; } APP_FB_RATE_LIMIT_PAR
 typedef struct { int32_t kaw; } APP_FB_ANTI_WINDUP_PARAMETER_T;
 typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_threshold; int32_t pid_deadband; uint16_t stable_count; uint16_t freeze_count; int32_t offset_limit; } APP_FB_ADAPTIVE_PARAMETER_T;
 
+/*
+ * Timing configuration is owned by the outer application layer.
+ * Public unit is milliseconds because application schedulers/HMI parameters
+ * commonly use ms. The controller converts and stores this internally in us.
+ */
+typedef struct
+{
+    uint32_t sample_time_ms;
+} APP_FB_TIMING_PARAMETER_T;
+
 #define APP_FB_PID_KP_DEFAULT 32768
 #define APP_FB_PID_KI_DEFAULT 600
 #define APP_FB_PID_KD_DEFAULT 65536
