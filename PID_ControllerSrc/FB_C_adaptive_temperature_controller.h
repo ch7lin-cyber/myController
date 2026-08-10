@@ -8,7 +8,7 @@ Change notice:
 [ADD] Runtime adaptive-learning parameter wiring via init_ex().
 [ADD] Runtime adaptive-learning reconfiguration API.
 [ADD] Load-disturbance integral arming and SV-change tracking.
-[ADD] Runtime sample-time ownership from outer application layer.
+[ADD] Initialization-only sample-time ownership from outer application layer.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 #define SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
@@ -83,7 +83,10 @@ MY_API void app_fb_temperature_controller_init_ex(
     const APP_FB_PID_PARAMETER_T *pid_parameter,
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
 
-/* New timing-aware init APIs. Timing is supplied by the outer application. */
+/*
+ * Timing-aware initialization. sample_time_ms is supplied by the outer
+ * scheduler/application and remains fixed for the lifetime of this init.
+ */
 MY_API APP_FB_ERROR app_fb_temperature_controller_init_timed(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_FF_POINT_T *ff_table,
@@ -99,10 +102,7 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter,
     const APP_FB_TIMING_PARAMETER_T *timing_parameter);
 
-MY_API APP_FB_ERROR app_fb_temperature_controller_set_sample_time_ms(
-    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
-    uint32_t sample_time_ms);
-
+/* Read-only timing diagnostics after initialization. */
 MY_API uint32_t app_fb_temperature_controller_get_sample_time_ms(
     const APP_FB_TEMPERATURE_CONTROLLER_T *fb);
 
