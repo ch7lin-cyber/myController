@@ -104,6 +104,7 @@ def _load_api(library_path: pathlib.Path) -> ctypes.CDLL:
         ctypes.POINTER(ctypes.c_int32),
         ctypes.POINTER(ctypes.c_int32),
         ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_int32),
     ]
     lib.Heater_myAdptiveControl.restype = None
 
@@ -135,7 +136,8 @@ def _run_sine_regression(lib: ctypes.CDLL) -> pathlib.Path:
                 "pid_out",
                 "ff_pwm",
                 "ff_offset",
-                "total_output",
+                "raw_sum",
+                "controller_pwm",
             ]
         )
 
@@ -146,6 +148,7 @@ def _run_sine_regression(lib: ctypes.CDLL) -> pathlib.Path:
             pid_out = ctypes.c_int32()
             ff_pwm = ctypes.c_int32()
             ff_offset = ctypes.c_int32()
+            heater_pwm = ctypes.c_int32()
 
             lib.Heater_myAdptiveControl(
                 ctypes.c_int16(pv),
@@ -153,7 +156,10 @@ def _run_sine_regression(lib: ctypes.CDLL) -> pathlib.Path:
                 ctypes.byref(pid_out),
                 ctypes.byref(ff_pwm),
                 ctypes.byref(ff_offset),
+                ctypes.byref(heater_pwm),
             )
+
+            raw_sum = pid_out.value + ff_pwm.value + ff_offset.value
 
             writer.writerow(
                 [
@@ -164,7 +170,8 @@ def _run_sine_regression(lib: ctypes.CDLL) -> pathlib.Path:
                     pid_out.value,
                     ff_pwm.value,
                     ff_offset.value,
-                    pid_out.value + ff_pwm.value + ff_offset.value,
+                    raw_sum,
+                    heater_pwm.value,
                 ]
             )
 
