@@ -24,11 +24,11 @@ static const APP_FB_FF_POINT_T heater_ff_table[] =
 
 static const APP_FB_PID_PARAMETER_T heater_pid =
 {
+    /* Public/reference gains are defined at 20 ms. B4-T2 normalizes Ki/Kd
+       internally when another fixed sample time is supplied at init. */
     .kp = 9000,
     .ki = 300,
     .kd = 5000,
-    /* Sustained-load capacity: Ki=300 with 32767 integral counts provides
-     * approximately +/-299 PWM counts of integral authority. */
     .integral_limit = 32767,
     .output_limit = 450,
     .kaw = APP_FB_PID_KAW_DEFAULT
@@ -69,13 +69,6 @@ MY_API APP_FB_ERROR Heater_Control_InitExTimed(
         &heater_pid,
         adaptive_parameter,
         &timing);
-}
-
-MY_API APP_FB_ERROR Heater_SetSampleTimeMs(uint32_t sample_time_ms)
-{
-    return app_fb_temperature_controller_set_sample_time_ms(
-        &heater_controller,
-        sample_time_ms);
 }
 
 MY_API uint32_t Heater_GetSampleTimeMs(void)
