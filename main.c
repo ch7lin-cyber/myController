@@ -15,8 +15,6 @@
 #include "PID_ControllerSrc/entry_C_adptiveTempController.h"
 
 #define APP_CONTROL_SAMPLE_TIME_MS    (20U)
-#define APP_PWM_MIN                   (0)
-#define APP_PWM_MAX                   (1000)
 
 /* --------------------------------------------------------------------------
  * Platform interface examples.
@@ -46,21 +44,6 @@ static void App_SetHeaterPwm(int32_t pwm)
     (void)pwm;
 }
 
-static int32_t App_ClampPwm(int32_t pwm)
-{
-    if (pwm < APP_PWM_MIN)
-    {
-        return APP_PWM_MIN;
-    }
-
-    if (pwm > APP_PWM_MAX)
-    {
-        return APP_PWM_MAX;
-    }
-
-    return pwm;
-}
-
 /* --------------------------------------------------------------------------
  * Controller task.
  * Call exactly once every APP_CONTROL_SAMPLE_TIME_MS.
@@ -72,7 +55,7 @@ static void App_ControllerTask(void)
     int32_t pid_out = 0;
     int32_t ff_pwm = 0;
     int32_t ff_offset = 0;
-    int32_t heater_pwm;
+    int32_t heater_pwm = 0;
 
     pv = App_ReadTemperature();
     sv = App_GetSetpoint();
@@ -82,15 +65,14 @@ static void App_ControllerTask(void)
         sv,
         &pid_out,
         &ff_pwm,
-        &ff_offset);
+        &ff_offset,
+        &heater_pwm);
 
     /*
-     * Current wrapper exposes the three controller components separately.
-     * Combine them here to obtain the final heater command.
+     * heater_pwm is the controller's final actuator command after internal
+     * saturation and output rate limiting. The application must not rebuild
+     * MV from pid_out + ff_pwm + ff_offset.
      */
-    heater_pwm = pid_out + ff_pwm + ff_offset;
-    heater_pwm = App_ClampPwm(heater_pwm);
-
     App_SetHeaterPwm(heater_pwm);
 }
 
