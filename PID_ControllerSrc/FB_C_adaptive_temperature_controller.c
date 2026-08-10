@@ -118,6 +118,7 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
 {
     APP_FB_ERROR timing_status;
     APP_FB_ERROR pid_status;
+    APP_FB_ERROR d_filter_status;
 
     if(fb == 0 || timing_parameter == 0 || pid_parameter == 0)
         return APP_FB_ERROR_NULL_POINTER;
@@ -136,7 +137,14 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
         return pid_status;
 
     app_fb_feedforward_init(&fb->ff, ff_table, ff_size);
-    app_fb_d_filter_init(&fb->d_filter, APP_FB_D_FILTER_ALPHA);
+
+    d_filter_status = app_fb_d_filter_init_timed(
+        &fb->d_filter,
+        fb->timing.sample_time_ms,
+        APP_FB_D_FILTER_TIME_CONSTANT_MS);
+    if(d_filter_status != APP_FB_OK)
+        return d_filter_status;
+
     app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
     app_fb_rate_limit_init(&fb->rate_limit, APP_FB_PWM_RISE_LIMIT, APP_FB_PWM_FALL_LIMIT);
     app_fb_ff_learning_init(&fb->learning, adaptive_parameter);
