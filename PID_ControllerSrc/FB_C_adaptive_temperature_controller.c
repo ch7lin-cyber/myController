@@ -120,6 +120,7 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
     APP_FB_ERROR pid_status;
     APP_FB_ERROR d_filter_status;
     APP_FB_ERROR rate_limit_status;
+    APP_FB_ERROR learning_status;
 
     if(fb == 0 || timing_parameter == 0 || pid_parameter == 0)
         return APP_FB_ERROR_NULL_POINTER;
@@ -156,7 +157,12 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
     if(rate_limit_status != APP_FB_OK)
         return rate_limit_status;
 
-    app_fb_ff_learning_init(&fb->learning, adaptive_parameter);
+    learning_status = app_fb_ff_learning_init_timed(
+        &fb->learning,
+        adaptive_parameter,
+        fb->timing.sample_time_ms);
+    if(learning_status != APP_FB_OK)
+        return learning_status;
 
     fb->previous_pwm = 0;
     fb->previous_sv = 0;
@@ -193,7 +199,10 @@ MY_API void app_fb_temperature_controller_set_adaptive_parameter
 )
 {
     if(fb == 0) return;
-    app_fb_ff_learning_reconfigure(&fb->learning, adaptive_parameter);
+    (void)app_fb_ff_learning_reconfigure_timed(
+        &fb->learning,
+        adaptive_parameter,
+        fb->timing.sample_time_ms);
 }
 
 MY_API void app_fb_temperature_controller_reset
