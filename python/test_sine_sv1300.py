@@ -52,6 +52,29 @@ def _shared_library_path(build_dir: pathlib.Path) -> pathlib.Path:
     return build_dir / "libmyController.so"
 
 
+def _find_compiler() -> tuple[str, str]:
+    """Return (compiler_path, compiler_kind)."""
+    requested = os.getenv("CC")
+    if requested:
+        path = shutil.which(requested)
+        if path is None:
+            raise RuntimeError(f"CC is set but compiler was not found: {requested}")
+        name = pathlib.Path(path).name.lower()
+        kind = "msvc" if name in {"cl", "cl.exe"} else "gnu"
+        return path, kind
+
+    for candidate in ("gcc", "clang", "cl"):
+        path = shutil.which(candidate)
+        if path is not None:
+            kind = "msvc" if candidate == "cl" else "gnu"
+            return path, kind
+
+    raise RuntimeError(
+        "No C compiler found. Install MinGW/LLVM or Visual Studio Build Tools, "
+        "or set CC to the compiler executable. Tried: gcc, clang, cl"
+    )
+
+
 def _build_shared_library() -> pathlib.Path:
     root = _repo_root()
     src_dir = root / "PID_ControllerSrc"
@@ -59,37 +82,57 @@ def _build_shared_library() -> pathlib.Path:
     build_dir.mkdir(parents=True, exist_ok=True)
     output = _shared_library_path(build_dir)
 
-    cc = os.getenv("CC", "gcc")
-    if shutil.which(cc) is None:
-        raise RuntimeError(f"C compiler not found: {cc}")
+    cc, compiler_kind = _find_compiler()
 
-    sources = sorted(str(path) for path in src_dir.glob("*.c"))
+    sources = sorted(str(path.resolve()) for path in src_dir.glob("*.c"))
     if not sources:
         raise RuntimeError(f"No C sources found in {src_dir}")
 
-    cmd = [
-        cc,
-        "-std=c11",
-        "-O2",
-        "-DPC_SIMULATION",
-        "-I", str(root),
-        "-I", str(src_dir),
-    ]
-
     system = platform.system().lower()
-    if system == "windows":
-        cmd += ["-shared", "-DSSM_FB_BUILD_DLL"]
-    elif system == "darwin":
-        cmd += ["-dynamiclib", "-fPIC", "-DSSM_FB_BUILD_SHARED"]
+
+    if compiler_kind == "msvc":
+        cmd = [
+            cc,
+            "/nologo",
+            "/LD",
+            "/O2",
+            "/DPC_SIMULATION",
+            "/DSSM_FB_BUILD_DLL",
+            f"/I{root}",
+            f"/I{src_dir}",
+        ]
+        cmd += sources
+        cmd += [f"/Fe:{output}"]
+        run_cwd = build_dir
     else:
-        cmd += ["-shared", "-fPIC", "-DSSM_FB_BUILD_SHARED"]
+        cmd = [
+            cc,
+            "-std=c11",
+            "-O2",
+            "-DPC_SIMULATION",
+            "-I", str(root),
+            "-I", str(src_dir),
+        ]
 
-    cmd += sources
-    cmd += ["-o", str(output)]
+        if system == "windows":
+            cmd += ["-shared", "-DSSM_FB_BUILD_DLL"]
+        elif system == "darwin":
+            cmd += ["-dynamiclib", "-fPIC", "-DSSM_FB_BUILD_SHARED"]
+        else:
+            cmd += ["-shared", "-fPIC", "-DSSM_FB_BUILD_SHARED"]
 
+        cmd += sources
+        cmd += ["-o", str(output)]
+        run_cwd = root
+
+    print(f"Compiler: {cc} ({compiler_kind})")
     print("Building shared library:")
     print(" ".join(cmd))
-    subprocess.run(cmd, check=True, cwd=root)
+    subprocess.run(cmd, check=True, cwd=run_cwd)
+
+    if not output.exists():
+        raise RuntimeError(f"Compiler completed but library was not created: {output}")
+
     return output
 
 
