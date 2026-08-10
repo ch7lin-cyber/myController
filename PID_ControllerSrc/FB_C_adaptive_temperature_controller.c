@@ -18,53 +18,74 @@ static int64_t app_fb_controller_abs_i64(int64_t value)
     return (value >= 0) ? value : -value;
 }
 
-static APP_FB_BOOL app_fb_controller_fast_heat_target(
-    int32_t error,
-    int32_t *target_pwm)
+static APP_FB_BOOL app_fb_controller_fast_heat_state_update(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    int32_t error)
 {
 #if APP_FB_FAST_HEAT_ENABLE
-    int64_t numerator;
-    int64_t denominator;
-    int64_t target;
+    if(fb == 0) return APP_FB_FALSE;
 
-    if(target_pwm == 0) return APP_FB_FALSE;
-
-    if(error < APP_FB_FAST_HEAT_START_ERROR)
-        return APP_FB_FALSE;
-
-    if(error >= APP_FB_FAST_HEAT_FULL_ERROR)
+    if(fb->fast_heat_active == APP_FB_FALSE)
     {
-        *target_pwm = APP_FB_LIMIT(
-            APP_FB_FAST_HEAT_FULL_PWM,
-            APP_FB_PWM_MIN,
-            APP_FB_PWM_MAX);
-        return APP_FB_TRUE;
+        if(error >= APP_FB_FAST_HEAT_ENTER_ERROR)
+            fb->fast_heat_active = APP_FB_TRUE;
+    }
+    else
+    {
+        if(error <= APP_FB_FAST_HEAT_EXIT_ERROR)
+            fb->fast_heat_active = APP_FB_FALSE;
     }
 
-    denominator = (int64_t)APP_FB_FAST_HEAT_FULL_ERROR -
-                  (int64_t)APP_FB_FAST_HEAT_START_ERROR;
+    return fb->fast_heat_active;
+#else
+    (void)fb;
+    (void)error;
+    return APP_FB_FALSE;
+#endif
+}
 
-    if(denominator <= 0)
-        return APP_FB_FALSE;
+static int32_t app_fb_controller_fast_heat_blend(
+    int32_t error,
+    int32_t normal_pwm)
+{
+#if APP_FB_FAST_HEAT_ENABLE
+    int64_t span;
+    int64_t x_q15;
+    int64_t smooth_q15;
+    int64_t scale;
+    int64_t target;
 
-    numerator = ((int64_t)APP_FB_FAST_HEAT_FULL_PWM -
-                 (int64_t)APP_FB_FAST_HEAT_START_PWM) *
-                ((int64_t)error -
-                 (int64_t)APP_FB_FAST_HEAT_START_ERROR);
+    normal_pwm = APP_FB_LIMIT(normal_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
 
-    target = (int64_t)APP_FB_FAST_HEAT_START_PWM +
-             (numerator / denominator);
+    if(error <= APP_FB_FAST_HEAT_ENTER_ERROR)
+        return normal_pwm;
 
-    *target_pwm = app_fb_controller_limit_i64(
-        target,
-        APP_FB_PWM_MIN,
-        APP_FB_PWM_MAX);
+    if(error >= APP_FB_FAST_HEAT_FULL_ERROR)
+        return APP_FB_LIMIT(APP_FB_FAST_HEAT_FULL_PWM, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
 
-    return APP_FB_TRUE;
+    span = (int64_t)APP_FB_FAST_HEAT_FULL_ERROR -
+           (int64_t)APP_FB_FAST_HEAT_ENTER_ERROR;
+    scale = (int64_t)APP_FB_FAST_HEAT_BLEND_SCALE;
+
+    if(span <= 0 || scale <= 0)
+        return normal_pwm;
+
+    x_q15 = (((int64_t)error - (int64_t)APP_FB_FAST_HEAT_ENTER_ERROR) * scale) / span;
+    if(x_q15 < 0) x_q15 = 0;
+    if(x_q15 > scale) x_q15 = scale;
+
+    /* smoothstep(x) = x^2 * (3 - 2x), represented on APP_FB_FAST_HEAT_BLEND_SCALE. */
+    smooth_q15 = (x_q15 * x_q15 * ((3 * scale) - (2 * x_q15))) /
+                 (scale * scale);
+
+    target = (int64_t)normal_pwm +
+             (smooth_q15 * ((int64_t)APP_FB_FAST_HEAT_FULL_PWM - (int64_t)normal_pwm)) /
+             scale;
+
+    return app_fb_controller_limit_i64(target, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
 #else
     (void)error;
-    (void)target_pwm;
-    return APP_FB_FALSE;
+    return APP_FB_LIMIT(normal_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
 #endif
 }
 
@@ -219,6 +240,7 @@ MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
     fb->manual_active = APP_FB_FALSE;
     fb->sv_initialized = APP_FB_FALSE;
     fb->integral_disturbance_armed = APP_FB_FALSE;
+    fb->fast_heat_active = APP_FB_FALSE;
     fb->state = APP_FB_STATE_IDLE;
 
     return APP_FB_OK;
@@ -279,6 +301,7 @@ MY_API void app_fb_temperature_controller_reset
     fb->manual_active = APP_FB_FALSE;
     fb->sv_initialized = APP_FB_FALSE;
     fb->integral_disturbance_armed = APP_FB_FALSE;
+    fb->fast_heat_active = APP_FB_FALSE;
     fb->state = APP_FB_STATE_IDLE;
 }
 
@@ -294,7 +317,6 @@ MY_API void app_fb_temperature_controller_run(
     int32_t total_raw;
     int32_t pid_limited_pwm;
     int32_t target_pwm;
-    int32_t boost_pwm;
     int32_t actual_pwm;
     int32_t error;
     int32_t d_filtered;
@@ -325,6 +347,7 @@ MY_API void app_fb_temperature_controller_run(
         fb->manual_active = APP_FB_FALSE;
         fb->sv_initialized = APP_FB_FALSE;
         fb->integral_disturbance_armed = APP_FB_FALSE;
+        fb->fast_heat_active = APP_FB_FALSE;
         fb->state = APP_FB_STATE_IDLE;
         return;
     }
@@ -342,6 +365,7 @@ MY_API void app_fb_temperature_controller_run(
         fb->previous_sv = input->sv;
         fb->sv_initialized = APP_FB_TRUE;
         fb->integral_disturbance_armed = APP_FB_FALSE;
+        fb->fast_heat_active = APP_FB_FALSE;
         fb->manual_active = APP_FB_TRUE;
         fb->state = APP_FB_STATE_RUN;
         return;
@@ -360,6 +384,7 @@ MY_API void app_fb_temperature_controller_run(
         {
             fb->previous_sv = input->sv;
             fb->integral_disturbance_armed = APP_FB_FALSE;
+            fb->fast_heat_active = APP_FB_FALSE;
             app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
             app_fb_pid_reset(&fb->pid);
         }
@@ -368,7 +393,7 @@ MY_API void app_fb_temperature_controller_run(
     error = input->sv - input->pv;
     output->error = error;
 
-    fast_heat_active = app_fb_controller_fast_heat_target(error, &boost_pwm);
+    fast_heat_active = app_fb_controller_fast_heat_state_update(fb, error);
 
     if(app_fb_controller_abs_i64((int64_t)error) <= (int64_t)APP_FB_I_ENABLE_ERROR)
         fb->integral_disturbance_armed = APP_FB_TRUE;
@@ -392,7 +417,7 @@ MY_API void app_fb_temperature_controller_run(
     }
     else if(fast_heat_active == APP_FB_TRUE)
     {
-        /* Boost is a temporary feed-forward floor. Do not accumulate I while it is active. */
+        /* V2 boost is temporary feed-forward assistance; do not accumulate I while armed. */
         fb->pid.integral_enable = APP_FB_FALSE;
     }
     else if(fb->integral_disturbance_armed == APP_FB_TRUE)
@@ -410,17 +435,15 @@ MY_API void app_fb_temperature_controller_run(
     total_raw64 = (int64_t)ff_base_pwm + (int64_t)ff_offset + (int64_t)pid_raw;
     total_raw = app_fb_controller_limit_i64(total_raw64, INT32_MIN, INT32_MAX);
 
-    /* Normal PID/FF command and its saturation are kept separate from boost. */
     pid_limited_pwm = APP_FB_LIMIT(total_raw, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
     target_pwm = pid_limited_pwm;
 
-    if(fast_heat_active == APP_FB_TRUE && boost_pwm > target_pwm)
-        target_pwm = boost_pwm;
+    if(fast_heat_active == APP_FB_TRUE)
+        target_pwm = app_fb_controller_fast_heat_blend(error, pid_limited_pwm);
 
     actual_pwm = app_fb_rate_limit_run(&fb->rate_limit, target_pwm);
     output->pwm = actual_pwm;
 
-    /* Anti-windup belongs to PID saturation only; boost is not saturation. */
     app_fb_pid_anti_windup(&fb->pid, total_raw, pid_limited_pwm);
 
     learning_allowed = APP_FB_FALSE;
