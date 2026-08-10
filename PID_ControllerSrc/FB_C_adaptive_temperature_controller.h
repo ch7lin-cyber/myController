@@ -8,6 +8,7 @@ Change notice:
 [ADD] Runtime adaptive-learning parameter wiring via init_ex().
 [ADD] Runtime adaptive-learning reconfiguration API.
 [ADD] Load-disturbance integral arming and SV-change tracking.
+[ADD] Initialization-only sample-time ownership from outer application layer.
 ***************************************************************/
 #ifndef SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
 #define SSM_STD_FB_APP_USER_ADAPTIVE_TEMP_CONTROLLER_CODE_H_
@@ -55,6 +56,10 @@ typedef struct
     APP_FB_INTEGRAL_SEPARATION_T i_sep;
     APP_FB_RATE_LIMIT_T rate_limit;
     APP_FB_FF_LEARNING_T learning;
+
+    APP_FB_TIMING_PARAMETER_T timing;
+    uint32_t sample_time_us;
+
     int32_t previous_pwm;
     APP_FB_TEMP previous_sv;
     APP_FB_STATE state;
@@ -63,18 +68,46 @@ typedef struct
     APP_FB_BOOL integral_disturbance_armed;
 } APP_FB_TEMPERATURE_CONTROLLER_T;
 
+/* Legacy init: uses APP_FB_SAMPLE_TIME_DEFAULT_MS. */
 MY_API void app_fb_temperature_controller_init(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_FF_POINT_T *ff_table,
     int32_t ff_size,
     const APP_FB_PID_PARAMETER_T *pid_parameter);
 
+/* Legacy init_ex: uses APP_FB_SAMPLE_TIME_DEFAULT_MS. */
 MY_API void app_fb_temperature_controller_init_ex(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_FF_POINT_T *ff_table,
     int32_t ff_size,
     const APP_FB_PID_PARAMETER_T *pid_parameter,
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
+
+/*
+ * Timing-aware initialization. sample_time_ms is supplied by the outer
+ * scheduler/application and remains fixed for the lifetime of this init.
+ */
+MY_API APP_FB_ERROR app_fb_temperature_controller_init_timed(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter,
+    const APP_FB_TIMING_PARAMETER_T *timing_parameter);
+
+MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter,
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter,
+    const APP_FB_TIMING_PARAMETER_T *timing_parameter);
+
+/* Read-only timing diagnostics after initialization. */
+MY_API uint32_t app_fb_temperature_controller_get_sample_time_ms(
+    const APP_FB_TEMPERATURE_CONTROLLER_T *fb);
+
+MY_API uint32_t app_fb_temperature_controller_get_sample_time_us(
+    const APP_FB_TEMPERATURE_CONTROLLER_T *fb);
 
 MY_API void app_fb_temperature_controller_set_adaptive_parameter(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,

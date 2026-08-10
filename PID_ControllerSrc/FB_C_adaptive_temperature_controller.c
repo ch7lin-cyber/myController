@@ -18,6 +18,35 @@ static int64_t app_fb_controller_abs_i64(int64_t value)
     return (value >= 0) ? value : -value;
 }
 
+static APP_FB_BOOL app_fb_controller_sample_time_valid(uint32_t sample_time_ms)
+{
+    if(sample_time_ms < APP_FB_SAMPLE_TIME_MIN_MS) return APP_FB_FALSE;
+    if(sample_time_ms > APP_FB_SAMPLE_TIME_MAX_MS) return APP_FB_FALSE;
+    return APP_FB_TRUE;
+}
+
+static APP_FB_ERROR app_fb_controller_apply_sample_time(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    uint32_t sample_time_ms)
+{
+    uint64_t sample_time_us;
+
+    if(fb == 0) return APP_FB_ERROR_NULL_POINTER;
+    if(app_fb_controller_sample_time_valid(sample_time_ms) == APP_FB_FALSE)
+        return APP_FB_ERROR_PARAMETER;
+
+    sample_time_us = (uint64_t)sample_time_ms *
+                     (uint64_t)APP_FB_SAMPLE_TIME_US_PER_MS;
+
+    if(sample_time_us > UINT32_MAX)
+        return APP_FB_ERROR_PARAMETER;
+
+    fb->timing.sample_time_ms = sample_time_ms;
+    fb->sample_time_us = (uint32_t)sample_time_us;
+
+    return APP_FB_OK;
+}
+
 MY_API void app_fb_temperature_controller_init
 (
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
@@ -26,12 +55,16 @@ MY_API void app_fb_temperature_controller_init
     const APP_FB_PID_PARAMETER_T *pid_parameter
 )
 {
-    app_fb_temperature_controller_init_ex(
+    APP_FB_TIMING_PARAMETER_T timing;
+
+    timing.sample_time_ms = APP_FB_SAMPLE_TIME_DEFAULT_MS;
+    (void)app_fb_temperature_controller_init_ex_timed(
         fb,
         ff_table,
         ff_size,
         pid_parameter,
-        0);
+        0,
+        &timing);
 }
 
 MY_API void app_fb_temperature_controller_init_ex
@@ -43,14 +76,93 @@ MY_API void app_fb_temperature_controller_init_ex
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter
 )
 {
-    if(fb == 0) return;
+    APP_FB_TIMING_PARAMETER_T timing;
 
-    app_fb_pid_init(&fb->pid, pid_parameter);
+    timing.sample_time_ms = APP_FB_SAMPLE_TIME_DEFAULT_MS;
+    (void)app_fb_temperature_controller_init_ex_timed(
+        fb,
+        ff_table,
+        ff_size,
+        pid_parameter,
+        adaptive_parameter,
+        &timing);
+}
+
+MY_API APP_FB_ERROR app_fb_temperature_controller_init_timed
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter,
+    const APP_FB_TIMING_PARAMETER_T *timing_parameter
+)
+{
+    return app_fb_temperature_controller_init_ex_timed(
+        fb,
+        ff_table,
+        ff_size,
+        pid_parameter,
+        0,
+        timing_parameter);
+}
+
+MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter,
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter,
+    const APP_FB_TIMING_PARAMETER_T *timing_parameter
+)
+{
+    APP_FB_ERROR timing_status;
+    APP_FB_ERROR pid_status;
+    APP_FB_ERROR d_filter_status;
+    APP_FB_ERROR rate_limit_status;
+    APP_FB_ERROR learning_status;
+
+    if(fb == 0 || timing_parameter == 0 || pid_parameter == 0)
+        return APP_FB_ERROR_NULL_POINTER;
+
+    timing_status = app_fb_controller_apply_sample_time(
+        fb,
+        timing_parameter->sample_time_ms);
+    if(timing_status != APP_FB_OK)
+        return timing_status;
+
+    pid_status = app_fb_pid_init_timed(
+        &fb->pid,
+        pid_parameter,
+        fb->timing.sample_time_ms);
+    if(pid_status != APP_FB_OK)
+        return pid_status;
+
     app_fb_feedforward_init(&fb->ff, ff_table, ff_size);
-    app_fb_d_filter_init(&fb->d_filter, APP_FB_D_FILTER_ALPHA);
+
+    d_filter_status = app_fb_d_filter_init_timed(
+        &fb->d_filter,
+        fb->timing.sample_time_ms,
+        APP_FB_D_FILTER_TIME_CONSTANT_MS);
+    if(d_filter_status != APP_FB_OK)
+        return d_filter_status;
+
     app_fb_integral_separation_init(&fb->i_sep, APP_FB_I_ENABLE_ERROR);
-    app_fb_rate_limit_init(&fb->rate_limit, APP_FB_PWM_RISE_LIMIT, APP_FB_PWM_FALL_LIMIT);
-    app_fb_ff_learning_init(&fb->learning, adaptive_parameter);
+
+    rate_limit_status = app_fb_rate_limit_init_timed(
+        &fb->rate_limit,
+        fb->timing.sample_time_ms,
+        APP_FB_PWM_RISE_RATE_PER_SEC,
+        APP_FB_PWM_FALL_RATE_PER_SEC);
+    if(rate_limit_status != APP_FB_OK)
+        return rate_limit_status;
+
+    learning_status = app_fb_ff_learning_init_timed(
+        &fb->learning,
+        adaptive_parameter,
+        fb->timing.sample_time_ms);
+    if(learning_status != APP_FB_OK)
+        return learning_status;
 
     fb->previous_pwm = 0;
     fb->previous_sv = 0;
@@ -58,6 +170,26 @@ MY_API void app_fb_temperature_controller_init_ex
     fb->sv_initialized = APP_FB_FALSE;
     fb->integral_disturbance_armed = APP_FB_FALSE;
     fb->state = APP_FB_STATE_IDLE;
+
+    return APP_FB_OK;
+}
+
+MY_API uint32_t app_fb_temperature_controller_get_sample_time_ms
+(
+    const APP_FB_TEMPERATURE_CONTROLLER_T *fb
+)
+{
+    if(fb == 0) return 0U;
+    return fb->timing.sample_time_ms;
+}
+
+MY_API uint32_t app_fb_temperature_controller_get_sample_time_us
+(
+    const APP_FB_TEMPERATURE_CONTROLLER_T *fb
+)
+{
+    if(fb == 0) return 0U;
+    return fb->sample_time_us;
 }
 
 MY_API void app_fb_temperature_controller_set_adaptive_parameter
@@ -67,7 +199,10 @@ MY_API void app_fb_temperature_controller_set_adaptive_parameter
 )
 {
     if(fb == 0) return;
-    app_fb_ff_learning_reconfigure(&fb->learning, adaptive_parameter);
+    (void)app_fb_ff_learning_reconfigure_timed(
+        &fb->learning,
+        adaptive_parameter,
+        fb->timing.sample_time_ms);
 }
 
 MY_API void app_fb_temperature_controller_reset
@@ -97,7 +232,7 @@ MY_API void app_fb_temperature_controller_reset
     fb->state = APP_FB_STATE_IDLE;
 }
 
-/* Main Controller Execute: 50Hz */
+/* Main Controller Execute: scheduling period is fixed by outer application at init. */
 MY_API void app_fb_temperature_controller_run(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_TEMP_CONTROLLER_INPUT_T *input,
@@ -202,9 +337,6 @@ MY_API void app_fb_temperature_controller_run(
     }
     else if(fb->integral_disturbance_armed == APP_FB_TRUE)
     {
-        /* Once the fixed-SV loop has entered the approach zone, keep integral
-         * available for later load rejection even if the disturbance drives
-         * the error outside the normal separation threshold. */
         fb->pid.integral_enable = APP_FB_TRUE;
     }
     else
