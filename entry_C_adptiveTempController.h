@@ -26,15 +26,16 @@ MY_API void Heater_Control_Init(void);
 MY_API void Heater_Control_InitEx(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
 
-/* Timing-aware application entry points. sample_time_ms range: 1..6000 ms. */
+/*
+ * Timing-aware initialization. sample_time_ms range: 1..6000 ms.
+ * The value tells the controller its fixed scheduler period and is not changed
+ * while the controller is running.
+ */
 MY_API APP_FB_ERROR Heater_Control_InitTimed(
     uint32_t sample_time_ms);
 
 MY_API APP_FB_ERROR Heater_Control_InitExTimed(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter,
-    uint32_t sample_time_ms);
-
-MY_API APP_FB_ERROR Heater_SetSampleTimeMs(
     uint32_t sample_time_ms);
 
 MY_API uint32_t Heater_GetSampleTimeMs(void);
