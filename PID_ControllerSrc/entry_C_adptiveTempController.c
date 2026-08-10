@@ -95,13 +95,19 @@ MY_API void Heater_myAdptiveControl(
     int16_t input_sv,
     int32_t *output_pid_out,
     int32_t *output_ff_pwm,
-    int32_t *output_ff_offset)
+    int32_t *output_ff_offset,
+    int32_t *output_heater_pwm)
 {
     static APP_FB_TEMP_CONTROLLER_INPUT_T input;
     static APP_FB_TEMP_CONTROLLER_OUTPUT_T output;
 
-    if(output_pid_out == 0 || output_ff_pwm == 0 || output_ff_offset == 0)
+    if(output_pid_out == 0 ||
+       output_ff_pwm == 0 ||
+       output_ff_offset == 0 ||
+       output_heater_pwm == 0)
+    {
         return;
+    }
 
     input.enable = APP_FB_TRUE;
     input.sv = input_sv;
@@ -113,6 +119,7 @@ MY_API void Heater_myAdptiveControl(
     *output_pid_out = output.pid_output;
     *output_ff_pwm = output.ff_pwm;
     *output_ff_offset = output.ff_offset;
+    *output_heater_pwm = output.pwm;
 }
 
 #ifdef __cplusplus
