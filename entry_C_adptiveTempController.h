@@ -5,6 +5,10 @@ Description :
 Purpose:
     Keep platform/application entry points separate from the reusable
     PID_ControllerSrc library interface.
+
+Timing policy:
+    The application/scheduler owns the execution period. The period is passed
+    once during initialization and remains fixed while the controller runs.
 ***************************************************************/
 #ifndef ENTRY_C_ADPTIVE_TEMP_CONTROLLER_H_
 #define ENTRY_C_ADPTIVE_TEMP_CONTROLLER_H_
@@ -20,16 +24,21 @@ extern "C" {
 #endif
 //------------------------------------------------------------------------------------//
 
-/* Legacy/default 20 ms initialization. */
+/*
+ * Legacy/default initialization retained for source compatibility.
+ * Uses APP_FB_SAMPLE_TIME_DEFAULT_MS (20 ms).
+ */
 MY_API void Heater_Control_Init(void);
 
 MY_API void Heater_Control_InitEx(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
 
 /*
- * Timing-aware initialization. sample_time_ms range: 1..6000 ms.
- * The value tells the controller its fixed scheduler period and is not changed
- * while the controller is running.
+ * Preferred initialization APIs.
+ * sample_time_ms range: APP_FB_SAMPLE_TIME_MIN_MS..APP_FB_SAMPLE_TIME_MAX_MS
+ * (currently 1..6000 ms).
+ * sample_time_ms is initialization-only; do not change scheduler period while
+ * the controller instance is running.
  */
 MY_API APP_FB_ERROR Heater_Control_InitTimed(
     uint32_t sample_time_ms);
@@ -38,8 +47,10 @@ MY_API APP_FB_ERROR Heater_Control_InitExTimed(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter,
     uint32_t sample_time_ms);
 
+/* Read-only diagnostic value captured at initialization. */
 MY_API uint32_t Heater_GetSampleTimeMs(void);
 
+/* Adaptive-learning parameters may be reconfigured; sample time is unchanged. */
 MY_API void Heater_SetAdaptiveParameter(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
 
