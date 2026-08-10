@@ -66,6 +66,7 @@ def _build_shared_library() -> pathlib.Path:
         gcc,
         "-std=c11",
         "-O2",
+        "-DPC_SIMULATION",
         "-I",
         str(root),
         "-I",
