@@ -43,12 +43,22 @@ MY_API uint32_t Heater_GetSampleTimeMs(void);
 MY_API void Heater_SetAdaptiveParameter(
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter);
 
+/*
+ * Execute one controller cycle.
+ *
+ * output_pid_out   : PID correction component for diagnostics.
+ * output_ff_pwm    : Feed-forward base PWM for diagnostics.
+ * output_ff_offset : Adaptive FF offset for diagnostics.
+ * output_heater_pwm: Final actuator command generated inside the controller
+ *                    after saturation and output rate limiting.
+ */
 MY_API void Heater_myAdptiveControl(
     int16_t input_pv,
     int16_t input_sv,
     int32_t *output_pid_out,
     int32_t *output_ff_pwm,
-    int32_t *output_ff_offset);
+    int32_t *output_ff_offset,
+    int32_t *output_heater_pwm);
 
 //------------------------------------------------------------------------------------//
 // C++ compatibility - DO NOT DELETE
