@@ -18,6 +18,41 @@ static int64_t app_fb_controller_abs_i64(int64_t value)
     return (value >= 0) ? value : -value;
 }
 
+static APP_FB_BOOL app_fb_controller_sample_time_valid(uint32_t sample_time_ms)
+{
+    if(sample_time_ms < APP_FB_SAMPLE_TIME_MIN_MS) return APP_FB_FALSE;
+    if(sample_time_ms > APP_FB_SAMPLE_TIME_MAX_MS) return APP_FB_FALSE;
+    return APP_FB_TRUE;
+}
+
+static APP_FB_ERROR app_fb_controller_apply_sample_time(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    uint32_t sample_time_ms)
+{
+    uint64_t sample_time_us;
+
+    if(fb == 0) return APP_FB_ERROR_NULL_POINTER;
+    if(app_fb_controller_sample_time_valid(sample_time_ms) == APP_FB_FALSE)
+        return APP_FB_ERROR_PARAMETER;
+
+    sample_time_us = (uint64_t)sample_time_ms *
+                     (uint64_t)APP_FB_SAMPLE_TIME_US_PER_MS;
+
+    if(sample_time_us > UINT32_MAX)
+        return APP_FB_ERROR_PARAMETER;
+
+    fb->timing.sample_time_ms = sample_time_ms;
+    fb->sample_time_us = (uint32_t)sample_time_us;
+
+    /*
+     * B4-T1 only establishes timing ownership, validation and storage.
+     * PID gain rescaling, derivative-filter coefficient updates, rate-limit
+     * conversion and adaptive-learning time conversion are intentionally
+     * implemented in later timing-refactor steps.
+     */
+    return APP_FB_OK;
+}
+
 MY_API void app_fb_temperature_controller_init
 (
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
@@ -26,12 +61,16 @@ MY_API void app_fb_temperature_controller_init
     const APP_FB_PID_PARAMETER_T *pid_parameter
 )
 {
-    app_fb_temperature_controller_init_ex(
+    APP_FB_TIMING_PARAMETER_T timing;
+
+    timing.sample_time_ms = APP_FB_SAMPLE_TIME_DEFAULT_MS;
+    (void)app_fb_temperature_controller_init_ex_timed(
         fb,
         ff_table,
         ff_size,
         pid_parameter,
-        0);
+        0,
+        &timing);
 }
 
 MY_API void app_fb_temperature_controller_init_ex
@@ -43,7 +82,56 @@ MY_API void app_fb_temperature_controller_init_ex
     const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter
 )
 {
-    if(fb == 0) return;
+    APP_FB_TIMING_PARAMETER_T timing;
+
+    timing.sample_time_ms = APP_FB_SAMPLE_TIME_DEFAULT_MS;
+    (void)app_fb_temperature_controller_init_ex_timed(
+        fb,
+        ff_table,
+        ff_size,
+        pid_parameter,
+        adaptive_parameter,
+        &timing);
+}
+
+MY_API APP_FB_ERROR app_fb_temperature_controller_init_timed
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter,
+    const APP_FB_TIMING_PARAMETER_T *timing_parameter
+)
+{
+    return app_fb_temperature_controller_init_ex_timed(
+        fb,
+        ff_table,
+        ff_size,
+        pid_parameter,
+        0,
+        timing_parameter);
+}
+
+MY_API APP_FB_ERROR app_fb_temperature_controller_init_ex_timed
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    const APP_FB_FF_POINT_T *ff_table,
+    int32_t ff_size,
+    const APP_FB_PID_PARAMETER_T *pid_parameter,
+    const APP_FB_ADAPTIVE_PARAMETER_T *adaptive_parameter,
+    const APP_FB_TIMING_PARAMETER_T *timing_parameter
+)
+{
+    APP_FB_ERROR timing_status;
+
+    if(fb == 0 || timing_parameter == 0)
+        return APP_FB_ERROR_NULL_POINTER;
+
+    timing_status = app_fb_controller_apply_sample_time(
+        fb,
+        timing_parameter->sample_time_ms);
+    if(timing_status != APP_FB_OK)
+        return timing_status;
 
     app_fb_pid_init(&fb->pid, pid_parameter);
     app_fb_feedforward_init(&fb->ff, ff_table, ff_size);
@@ -58,6 +146,35 @@ MY_API void app_fb_temperature_controller_init_ex
     fb->sv_initialized = APP_FB_FALSE;
     fb->integral_disturbance_armed = APP_FB_FALSE;
     fb->state = APP_FB_STATE_IDLE;
+
+    return APP_FB_OK;
+}
+
+MY_API APP_FB_ERROR app_fb_temperature_controller_set_sample_time_ms
+(
+    APP_FB_TEMPERATURE_CONTROLLER_T *fb,
+    uint32_t sample_time_ms
+)
+{
+    return app_fb_controller_apply_sample_time(fb, sample_time_ms);
+}
+
+MY_API uint32_t app_fb_temperature_controller_get_sample_time_ms
+(
+    const APP_FB_TEMPERATURE_CONTROLLER_T *fb
+)
+{
+    if(fb == 0) return 0U;
+    return fb->timing.sample_time_ms;
+}
+
+MY_API uint32_t app_fb_temperature_controller_get_sample_time_us
+(
+    const APP_FB_TEMPERATURE_CONTROLLER_T *fb
+)
+{
+    if(fb == 0) return 0U;
+    return fb->sample_time_us;
 }
 
 MY_API void app_fb_temperature_controller_set_adaptive_parameter
@@ -97,7 +214,7 @@ MY_API void app_fb_temperature_controller_reset
     fb->state = APP_FB_STATE_IDLE;
 }
 
-/* Main Controller Execute: 50Hz */
+/* Main Controller Execute: scheduling period is supplied by outer application. */
 MY_API void app_fb_temperature_controller_run(
     APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     const APP_FB_TEMP_CONTROLLER_INPUT_T *input,
@@ -202,9 +319,6 @@ MY_API void app_fb_temperature_controller_run(
     }
     else if(fb->integral_disturbance_armed == APP_FB_TRUE)
     {
-        /* Once the fixed-SV loop has entered the approach zone, keep integral
-         * available for later load rejection even if the disturbance drives
-         * the error outside the normal separation threshold. */
         fb->pid.integral_enable = APP_FB_TRUE;
     }
     else
