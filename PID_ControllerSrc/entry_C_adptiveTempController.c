@@ -35,7 +35,7 @@ static const APP_FB_PID_PARAMETER_T heater_pid =
     .ki = 300,
     .kd = 5000,
     .integral_limit = 32767,
-    .output_limit = 450,
+    .output_limit = 900,
     .kaw = APP_FB_PID_KAW_DEFAULT
 };
 
