@@ -26,13 +26,22 @@ typedef struct { int32_t error_threshold; int32_t gain; int32_t sv_change_thresh
 
 /*
  * Timing configuration is owned by the outer application layer.
- * Public unit is milliseconds because application schedulers/HMI parameters
- * commonly use ms. The controller converts and stores this internally in us.
+ * It is supplied during initialization and remains fixed while RUNNING.
  */
 typedef struct
 {
     uint32_t sample_time_ms;
 } APP_FB_TIMING_PARAMETER_T;
+
+/*
+ * Existing PID gains were tuned at 20 ms. They remain the public/reference
+ * parameters so old parameter sets stay valid. B4-T2 derives runtime gains
+ * from the configured scheduler period during initialization:
+ *   Kp_runtime = Kp_reference
+ *   Ki_runtime = Ki_reference * Ts / Tref
+ *   Kd_runtime = Kd_reference * Tref / Ts
+ */
+#define APP_FB_PID_REFERENCE_SAMPLE_TIME_MS  (20U)
 
 #define APP_FB_PID_KP_DEFAULT 32768
 #define APP_FB_PID_KI_DEFAULT 600
