@@ -64,32 +64,39 @@ typedef struct
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
- * Fast Heating Boost V2 for heater-only plants.
+ * Fast Heating Boost V3 for heater-only plants.
  * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
  *
- * Hysteresis:
- *   enter boost state when error >= +20.0C
- *   leave boost state when error <= +15.0C
+ * Fast heat:
+ *   enter at +10.0C, leave at +5.0C
+ *   +10.0C..+40.0C -> smoothstep toward full PWM
+ *   >= +40.0C -> 100% PWM target
  *
- * Smooth blend:
- *   error <= +20.0C -> 0% boost contribution
- *   +20.0C..+80.0C -> smoothstep blend from normal FF+PID toward full PWM
- *   error >= +80.0C -> 100% PWM target
- *
- * This removes the V1 discontinuity where crossing +20.0C immediately
- * imposed a fixed 50% PWM floor.
+ * Predictive brake:
+ *   predicted_pv = pv + filtered_delta_pv * prediction_ms / sample_time_ms
+ *   predicted_error = sv - predicted_pv
+ *   when the plant is heating and predicted_error <= +10.0C, boost is suppressed
+ *   and target PWM is blended down toward normal FF+PID.
+ *   at predicted_error <= 0C, fast heat is fully removed.
  */
-#define APP_FB_FAST_HEAT_ENABLE             (1)
-#define APP_FB_FAST_HEAT_ENTER_ERROR        (200)
-#define APP_FB_FAST_HEAT_EXIT_ERROR         (150)
-#define APP_FB_FAST_HEAT_FULL_ERROR         (800)
-#define APP_FB_FAST_HEAT_FULL_PWM           (1000)
-#define APP_FB_FAST_HEAT_BLEND_SCALE        (32768)
+#define APP_FB_FAST_HEAT_ENABLE                 (1)
+#define APP_FB_FAST_HEAT_ENTER_ERROR            (100)
+#define APP_FB_FAST_HEAT_EXIT_ERROR              (50)
+#define APP_FB_FAST_HEAT_FULL_ERROR             (400)
+#define APP_FB_FAST_HEAT_FULL_PWM              (1000)
+#define APP_FB_FAST_HEAT_BLEND_SCALE          (32768)
+
+#define APP_FB_PREDICTIVE_BRAKE_ENABLE           (1)
+#define APP_FB_PREDICTIVE_BRAKE_TIME_MS        (2000U)
+#define APP_FB_PREDICTIVE_BRAKE_ENTER_ERROR     (100)
+#define APP_FB_PREDICTIVE_BRAKE_FULL_ERROR        (0)
+#define APP_FB_PREDICTIVE_BRAKE_MIN_RISE_DELTA    (1)
 
 #define APP_FB_D_FILTER_TIME_CONSTANT_MS  (140U)
 
-#define APP_FB_PWM_RISE_RATE_PER_SEC  (1500)
-#define APP_FB_PWM_FALL_RATE_PER_SEC  (2500)
+/* Faster heat-up and faster thermal braking for V3. */
+#define APP_FB_PWM_RISE_RATE_PER_SEC  (3000)
+#define APP_FB_PWM_FALL_RATE_PER_SEC  (7500)
 
 #define APP_FB_KAW APP_FB_PID_KAW_DEFAULT
 #define APP_FB_ADAPTIVE_ERROR 10
