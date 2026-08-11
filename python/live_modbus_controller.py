@@ -1,0 +1,610 @@
+#!/usr/bin/env python3
+"""Live Modbus TCP closed-loop runner for the adaptive heater controller.
+
+Default target:
+    IP       : 192.168.1.10
+    Port     : 2502
+    PV reg   : 92   (holding register, signed int16, 0.1 degC)
+    MV reg   : 108  (holding register, 0..1000 = 0.0..100.0%)
+    Period   : 20 ms
+
+Safety policy:
+    - Starts in STOP state.
+    - STOP / quit / Ctrl+C / communication fault attempts to write MV=0.
+    - RUN re-initializes the controller so stale PID/boost state is not reused.
+
+Terminal commands:
+    run
+    stop
+    sv 1300       # 130.0 C
+    sv 130.0c     # also accepted
+    status
+    help
+    quit
+
+The script compiles PID_ControllerSrc/*.c into a shared library, loads it with
+ctypes, runs Heater_myAdptiveControl(), writes controller_pwm to the MV register,
+and logs controller plus timing/network diagnostics to CSV.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import ctypes
+import datetime as dt
+import math
+import os
+import pathlib
+import platform
+import queue
+import shutil
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass
+
+try:
+    from pymodbus.client import ModbusTcpClient
+except ImportError as exc:
+    raise SystemExit(
+        "pymodbus is required. Install with: python -m pip install pymodbus"
+    ) from exc
+
+
+DEFAULT_HOST = "192.168.1.10"
+DEFAULT_PORT = 2502
+DEFAULT_PV_REG = 92
+DEFAULT_MV_REG = 108
+DEFAULT_UNIT_ID = 1
+DEFAULT_SAMPLE_MS = 20
+DEFAULT_SV = 1300
+
+PWM_MIN = 0
+PWM_MAX = 1000
+TEMP_MIN = -2000      # -200.0 C
+TEMP_MAX = 18000      # 1800.0 C
+
+# Mirror the current Branch-4 Fast Heating Boost V3 parameters for host-side
+# diagnostic estimates. The controller DLL remains the source of truth.
+FAST_HEAT_ENTER_ERROR = 100       # 10.0 C
+FAST_HEAT_EXIT_ERROR = 50         # 5.0 C
+FAST_HEAT_FULL_ERROR = 400        # 40.0 C
+PREDICT_TIME_MS = 2000
+PREDICT_BRAKE_ENTER_ERROR = 100   # 10.0 C predicted remaining error
+D_FILTER_TAU_MS = 140
+
+
+class ControllerDiagnostics(ctypes.Structure):
+    """Reserved for future DLL diagnostics API; host diagnostics are logged now."""
+    _fields_ = []
+
+
+@dataclass
+class RuntimeState:
+    running: bool = False
+    quit_requested: bool = False
+    sv: int = DEFAULT_SV
+    last_pv: int | None = None
+    last_mv: int = 0
+    last_pid: int = 0
+    last_ff: int = 0
+    last_ff_offset: int = 0
+    last_raw_sum: int = 0
+    last_controller_pwm: int = 0
+    host_dpv_filtered: float = 0.0
+    host_fast_heat_active: bool = False
+    comm_errors: int = 0
+    missed_deadlines: int = 0
+
+
+def _repo_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[1]
+
+
+def _shared_library_path(build_dir: pathlib.Path) -> pathlib.Path:
+    system = platform.system().lower()
+    if system == "windows":
+        return build_dir / "myController.dll"
+    if system == "darwin":
+        return build_dir / "libmyController.dylib"
+    return build_dir / "libmyController.so"
+
+
+def _find_compiler() -> tuple[str, str]:
+    requested = os.getenv("CC")
+    if requested:
+        path = shutil.which(requested)
+        if path is None and pathlib.Path(requested).exists():
+            path = str(pathlib.Path(requested).resolve())
+        if path is None:
+            raise RuntimeError(f"CC is set but compiler was not found: {requested}")
+        name = pathlib.Path(path).name.lower()
+        return path, "msvc" if name in {"cl", "cl.exe"} else "gnu"
+
+    for candidate in ("gcc", "clang", "cl"):
+        path = shutil.which(candidate)
+        if path is not None:
+            return path, "msvc" if candidate == "cl" else "gnu"
+
+    raise RuntimeError(
+        "No C compiler found. Install MinGW/LLVM or Visual Studio Build Tools, "
+        "or set CC to the compiler executable. Tried: gcc, clang, cl"
+    )
+
+
+def _build_shared_library() -> pathlib.Path:
+    root = _repo_root()
+    src_dir = root / "PID_ControllerSrc"
+    build_dir = pathlib.Path(__file__).resolve().parent / "build"
+    build_dir.mkdir(parents=True, exist_ok=True)
+    output = _shared_library_path(build_dir)
+
+    cc, compiler_kind = _find_compiler()
+    sources = sorted(str(path.resolve()) for path in src_dir.glob("*.c"))
+    if not sources:
+        raise RuntimeError(f"No C sources found in {src_dir}")
+
+    system = platform.system().lower()
+    if compiler_kind == "msvc":
+        cmd = [
+            cc, "/nologo", "/LD", "/O2", "/DPC_SIMULATION", "/DSSM_FB_BUILD_DLL",
+            f"/I{root}", f"/I{src_dir}",
+        ] + sources + [f"/Fe:{output}"]
+        run_cwd = build_dir
+    else:
+        cmd = [
+            cc, "-std=c11", "-O2", "-DPC_SIMULATION",
+            "-I", str(root), "-I", str(src_dir),
+        ]
+        if system == "windows":
+            cmd += ["-shared", "-DSSM_FB_BUILD_DLL"]
+        elif system == "darwin":
+            cmd += ["-dynamiclib", "-fPIC", "-DSSM_FB_BUILD_SHARED"]
+        else:
+            cmd += ["-shared", "-fPIC", "-DSSM_FB_BUILD_SHARED"]
+        cmd += sources + ["-o", str(output)]
+        run_cwd = root
+
+    print(f"Compiler: {cc} ({compiler_kind})")
+    subprocess.run(cmd, check=True, cwd=run_cwd)
+    if not output.exists():
+        raise RuntimeError(f"Shared library was not created: {output}")
+    return output
+
+
+def _load_controller(path: pathlib.Path) -> ctypes.CDLL:
+    lib = ctypes.CDLL(str(path))
+    lib.Heater_Control_InitTimed.argtypes = [ctypes.c_uint32]
+    lib.Heater_Control_InitTimed.restype = ctypes.c_int
+    lib.Heater_myAdptiveControl.argtypes = [
+        ctypes.c_int16,
+        ctypes.c_int16,
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_int32),
+    ]
+    lib.Heater_myAdptiveControl.restype = None
+    return lib
+
+
+def _int16_from_register(value: int) -> int:
+    value &= 0xFFFF
+    return value - 0x10000 if value & 0x8000 else value
+
+
+def _modbus_read_holding(client: ModbusTcpClient, address: int, unit_id: int):
+    try:
+        return client.read_holding_registers(address=address, count=1, device_id=unit_id)
+    except TypeError:
+        # Compatibility with older pymodbus releases.
+        return client.read_holding_registers(address=address, count=1, slave=unit_id)
+
+
+def _modbus_write_register(client: ModbusTcpClient, address: int, value: int, unit_id: int):
+    try:
+        return client.write_register(address=address, value=value, device_id=unit_id)
+    except TypeError:
+        return client.write_register(address=address, value=value, slave=unit_id)
+
+
+def _read_pv(client: ModbusTcpClient, address: int, unit_id: int) -> int:
+    result = _modbus_read_holding(client, address, unit_id)
+    if result is None or result.isError() or not getattr(result, "registers", None):
+        raise RuntimeError(f"PV read failed: {result}")
+    return _int16_from_register(result.registers[0])
+
+
+def _write_mv(client: ModbusTcpClient, address: int, value: int, unit_id: int) -> None:
+    value = max(PWM_MIN, min(PWM_MAX, int(value)))
+    result = _modbus_write_register(client, address, value, unit_id)
+    if result is None or result.isError():
+        raise RuntimeError(f"MV write failed: {result}")
+
+
+def _safe_write_zero(client: ModbusTcpClient, address: int, unit_id: int) -> None:
+    try:
+        _write_mv(client, address, 0, unit_id)
+    except Exception as exc:  # safety cleanup path
+        print(f"WARNING: unable to write MV=0: {exc}", file=sys.stderr)
+
+
+def _parse_sv(text: str) -> int:
+    text = text.strip().lower()
+    if text.endswith("c"):
+        value = float(text[:-1])
+        result = int(round(value * 10.0))
+    elif "." in text:
+        # Human-friendly decimal is treated as degrees C.
+        result = int(round(float(text) * 10.0))
+    else:
+        # Integer keeps the controller's native 0.1 C representation.
+        result = int(text, 10)
+
+    if result < TEMP_MIN or result > TEMP_MAX:
+        raise ValueError(f"SV outside supported range {TEMP_MIN}..{TEMP_MAX} (0.1C)")
+    return result
+
+
+def _command_reader(command_queue: queue.Queue[str]) -> None:
+    while True:
+        try:
+            line = input().strip()
+        except EOFError:
+            command_queue.put("quit")
+            return
+        if line:
+            command_queue.put(line)
+            if line.lower() in {"quit", "q", "exit"}:
+                return
+
+
+def _print_help() -> None:
+    print(
+        "Commands:\n"
+        "  run           start closed-loop control (controller is re-initialized)\n"
+        "  stop          stop control and write MV=0\n"
+        "  sv 1300       set SV to 130.0 C (native 0.1C unit)\n"
+        "  sv 130.0c     set SV using degrees C\n"
+        "  status        print current state\n"
+        "  help          show commands\n"
+        "  quit          write MV=0 and exit"
+    )
+
+
+def _host_diagnostics(state: RuntimeState, pv: int, sv: int, sample_ms: int) -> tuple[float, float, float, bool, bool]:
+    """Return host-side estimates matching V3 concepts, not DLL internal state."""
+    if state.last_pv is None:
+        delta = 0.0
+        state.host_dpv_filtered = 0.0
+    else:
+        delta = float(pv - state.last_pv)
+        alpha = D_FILTER_TAU_MS / (D_FILTER_TAU_MS + float(sample_ms))
+        state.host_dpv_filtered = alpha * state.host_dpv_filtered + (1.0 - alpha) * delta
+
+    rate_per_sec = state.host_dpv_filtered * 1000.0 / float(sample_ms)
+    predicted_pv = float(pv) + state.host_dpv_filtered * (PREDICT_TIME_MS / float(sample_ms))
+    predicted_error = float(sv) - predicted_pv
+
+    error = sv - pv
+    if not state.host_fast_heat_active:
+        if error >= FAST_HEAT_ENTER_ERROR:
+            state.host_fast_heat_active = True
+    elif error <= FAST_HEAT_EXIT_ERROR:
+        state.host_fast_heat_active = False
+
+    brake = (
+        state.host_fast_heat_active
+        and state.host_dpv_filtered > 0.0
+        and predicted_error <= PREDICT_BRAKE_ENTER_ERROR
+    )
+    return rate_per_sec, predicted_pv, predicted_error, state.host_fast_heat_active, brake
+
+
+def _process_command(
+    line: str,
+    state: RuntimeState,
+    lib: ctypes.CDLL,
+    sample_ms: int,
+    client: ModbusTcpClient,
+    mv_reg: int,
+    unit_id: int,
+) -> str:
+    parts = line.strip().split()
+    if not parts:
+        return ""
+    cmd = parts[0].lower()
+
+    if cmd == "run":
+        status = lib.Heater_Control_InitTimed(sample_ms)
+        if status != 0:
+            return f"Controller init failed: {status}"
+        state.running = True
+        state.host_fast_heat_active = False
+        state.host_dpv_filtered = 0.0
+        state.last_pv = None
+        return f"RUN: SV={state.sv} ({state.sv / 10.0:.1f}C), Ts={sample_ms}ms"
+
+    if cmd == "stop":
+        state.running = False
+        state.last_mv = 0
+        _safe_write_zero(client, mv_reg, unit_id)
+        return "STOP: MV=0"
+
+    if cmd == "sv":
+        if len(parts) != 2:
+            return "Usage: sv 1300   or   sv 130.0c"
+        try:
+            state.sv = _parse_sv(parts[1])
+        except ValueError as exc:
+            return f"Invalid SV: {exc}"
+        return f"SV={state.sv} ({state.sv / 10.0:.1f}C)"
+
+    if cmd == "status":
+        return (
+            f"{'RUN' if state.running else 'STOP'} "
+            f"SV={state.sv / 10.0:.1f}C "
+            f"PV={(state.last_pv / 10.0) if state.last_pv is not None else float('nan'):.1f}C "
+            f"PID={state.last_pid} FF={state.last_ff} OFF={state.last_ff_offset} "
+            f"PWM={state.last_controller_pwm} COMM_ERR={state.comm_errors} "
+            f"MISS={state.missed_deadlines}"
+        )
+
+    if cmd in {"help", "?"}:
+        _print_help()
+        return ""
+
+    if cmd in {"quit", "q", "exit"}:
+        state.running = False
+        state.quit_requested = True
+        _safe_write_zero(client, mv_reg, unit_id)
+        return "QUIT: MV=0"
+
+    return f"Unknown command: {cmd}. Type 'help'."
+
+
+def _csv_path(csv_dir: pathlib.Path) -> pathlib.Path:
+    stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return csv_dir / f"live_control_{stamp}.csv"
+
+
+def run(args: argparse.Namespace) -> int:
+    if args.sample_ms < 1 or args.sample_ms > 6000:
+        raise RuntimeError("sample-ms must be 1..6000")
+
+    lib_path = _build_shared_library()
+    lib = _load_controller(lib_path)
+
+    client = ModbusTcpClient(host=args.host, port=args.port, timeout=args.timeout)
+    if not client.connect():
+        raise RuntimeError(f"Cannot connect to Modbus TCP {args.host}:{args.port}")
+
+    state = RuntimeState(sv=args.sv)
+    command_queue: queue.Queue[str] = queue.Queue()
+    command_thread = threading.Thread(target=_command_reader, args=(command_queue,), daemon=True)
+    command_thread.start()
+
+    csv_dir = pathlib.Path(args.csv_dir).resolve()
+    csv_dir.mkdir(parents=True, exist_ok=True)
+    output_path = _csv_path(csv_dir)
+
+    fieldnames = [
+        "wall_time", "elapsed_s", "sample_index", "state",
+        "sv", "pv", "error",
+        "pid_out", "ff_pwm", "ff_offset", "raw_sum", "controller_pwm", "mv_written",
+        "host_dpv_filtered_per_sample", "host_pv_rate_0p1c_per_s",
+        "host_predicted_pv", "host_predicted_error",
+        "host_fast_heat_active", "host_predictive_brake_active",
+        "read_ms", "control_us", "write_ms", "cycle_ms", "jitter_ms",
+        "deadline_miss", "comm_ok", "comm_errors", "note",
+    ]
+
+    print(f"Connected: {args.host}:{args.port}, unit={args.unit_id}")
+    print(f"PV register={args.pv_reg}, MV register={args.mv_reg}, Ts={args.sample_ms}ms")
+    print(f"CSV: {output_path}")
+    print("Starts in STOP. Type 'sv 1300' then 'run'. Type 'help' for commands.")
+
+    _safe_write_zero(client, args.mv_reg, args.unit_id)
+
+    start = time.perf_counter()
+    next_deadline = start
+    sample_index = 0
+    last_console = start
+    period_s = args.sample_ms / 1000.0
+
+    try:
+        with output_path.open("w", newline="", encoding="utf-8", buffering=1) as stream:
+            writer = csv.DictWriter(stream, fieldnames=fieldnames)
+            writer.writeheader()
+
+            while not state.quit_requested:
+                loop_start = time.perf_counter()
+                note_parts: list[str] = []
+
+                while True:
+                    try:
+                        command = command_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    message = _process_command(
+                        command, state, lib, args.sample_ms, client, args.mv_reg, args.unit_id
+                    )
+                    if message:
+                        print(message)
+                        note_parts.append(message)
+
+                if state.quit_requested:
+                    break
+
+                comm_ok = True
+                pv: int | None = None
+                read_ms = 0.0
+                control_us = 0.0
+                write_ms = 0.0
+                mv_written = 0
+
+                try:
+                    t0 = time.perf_counter()
+                    pv = _read_pv(client, args.pv_reg, args.unit_id)
+                    read_ms = (time.perf_counter() - t0) * 1000.0
+
+                    if pv < TEMP_MIN or pv > TEMP_MAX:
+                        raise RuntimeError(f"PV out of safety range: {pv}")
+
+                    rate, predicted_pv, predicted_error, host_boost, host_brake = _host_diagnostics(
+                        state, pv, state.sv, args.sample_ms
+                    )
+
+                    if state.running:
+                        pid_out = ctypes.c_int32()
+                        ff_pwm = ctypes.c_int32()
+                        ff_offset = ctypes.c_int32()
+                        controller_pwm = ctypes.c_int32()
+
+                        t0 = time.perf_counter()
+                        lib.Heater_myAdptiveControl(
+                            ctypes.c_int16(pv), ctypes.c_int16(state.sv),
+                            ctypes.byref(pid_out), ctypes.byref(ff_pwm),
+                            ctypes.byref(ff_offset), ctypes.byref(controller_pwm),
+                        )
+                        control_us = (time.perf_counter() - t0) * 1_000_000.0
+
+                        state.last_pid = pid_out.value
+                        state.last_ff = ff_pwm.value
+                        state.last_ff_offset = ff_offset.value
+                        state.last_raw_sum = pid_out.value + ff_pwm.value + ff_offset.value
+                        state.last_controller_pwm = max(PWM_MIN, min(PWM_MAX, controller_pwm.value))
+
+                        t0 = time.perf_counter()
+                        _write_mv(client, args.mv_reg, state.last_controller_pwm, args.unit_id)
+                        write_ms = (time.perf_counter() - t0) * 1000.0
+                        mv_written = state.last_controller_pwm
+                        state.last_mv = mv_written
+                    else:
+                        state.last_pid = 0
+                        state.last_ff = 0
+                        state.last_ff_offset = 0
+                        state.last_raw_sum = 0
+                        state.last_controller_pwm = 0
+                        mv_written = 0
+
+                except Exception as exc:
+                    comm_ok = False
+                    state.comm_errors += 1
+                    state.running = False
+                    state.last_mv = 0
+                    _safe_write_zero(client, args.mv_reg, args.unit_id)
+                    note_parts.append(f"FAULT:{exc}")
+                    print(f"FAULT -> STOP/MV=0: {exc}", file=sys.stderr)
+
+                    rate = 0.0
+                    predicted_pv = float(pv) if pv is not None else math.nan
+                    predicted_error = (state.sv - pv) if pv is not None else math.nan
+                    host_boost = False
+                    host_brake = False
+
+                now = time.perf_counter()
+                cycle_ms = (now - loop_start) * 1000.0
+                next_deadline += period_s
+                jitter_ms = (now - next_deadline) * 1000.0
+                deadline_miss = now > next_deadline
+                if deadline_miss:
+                    state.missed_deadlines += 1
+
+                writer.writerow({
+                    "wall_time": dt.datetime.now().isoformat(timespec="milliseconds"),
+                    "elapsed_s": f"{now - start:.6f}",
+                    "sample_index": sample_index,
+                    "state": "RUN" if state.running else "STOP",
+                    "sv": state.sv,
+                    "pv": "" if pv is None else pv,
+                    "error": "" if pv is None else state.sv - pv,
+                    "pid_out": state.last_pid,
+                    "ff_pwm": state.last_ff,
+                    "ff_offset": state.last_ff_offset,
+                    "raw_sum": state.last_raw_sum,
+                    "controller_pwm": state.last_controller_pwm,
+                    "mv_written": mv_written,
+                    "host_dpv_filtered_per_sample": f"{state.host_dpv_filtered:.6f}",
+                    "host_pv_rate_0p1c_per_s": f"{rate:.6f}",
+                    "host_predicted_pv": f"{predicted_pv:.3f}",
+                    "host_predicted_error": f"{predicted_error:.3f}",
+                    "host_fast_heat_active": int(bool(host_boost)),
+                    "host_predictive_brake_active": int(bool(host_brake)),
+                    "read_ms": f"{read_ms:.3f}",
+                    "control_us": f"{control_us:.3f}",
+                    "write_ms": f"{write_ms:.3f}",
+                    "cycle_ms": f"{cycle_ms:.3f}",
+                    "jitter_ms": f"{jitter_ms:.3f}",
+                    "deadline_miss": int(deadline_miss),
+                    "comm_ok": int(comm_ok),
+                    "comm_errors": state.comm_errors,
+                    "note": " | ".join(note_parts),
+                })
+
+                if pv is not None:
+                    state.last_pv = pv
+
+                if now - last_console >= 1.0:
+                    pv_text = "----" if pv is None else f"{pv / 10.0:7.1f}C"
+                    pred_text = "----" if pv is None else f"{predicted_pv / 10.0:7.1f}C"
+                    print(
+                        f"{'RUN ' if state.running else 'STOP'} "
+                        f"PV={pv_text} SV={state.sv / 10.0:6.1f}C "
+                        f"PID={state.last_pid:5d} FF={state.last_ff:4d} "
+                        f"PWM={state.last_controller_pwm:4d} "
+                        f"PredPV={pred_text} "
+                        f"Loop={cycle_ms:5.1f}ms miss={state.missed_deadlines}"
+                    )
+                    last_console = now
+
+                sample_index += 1
+
+                sleep_s = next_deadline - time.perf_counter()
+                if sleep_s > 0:
+                    time.sleep(sleep_s)
+                else:
+                    # Re-anchor after an overrun so delay does not accumulate forever.
+                    next_deadline = time.perf_counter()
+
+    except KeyboardInterrupt:
+        print("Ctrl+C -> STOP")
+    finally:
+        state.running = False
+        _safe_write_zero(client, args.mv_reg, args.unit_id)
+        client.close()
+        print(f"MV forced to 0. CSV saved: {output_path}")
+
+    return 0
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Live Modbus TCP adaptive heater controller")
+    parser.add_argument("--host", default=DEFAULT_HOST)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--pv-reg", type=int, default=DEFAULT_PV_REG)
+    parser.add_argument("--mv-reg", type=int, default=DEFAULT_MV_REG)
+    parser.add_argument("--unit-id", type=int, default=DEFAULT_UNIT_ID)
+    parser.add_argument("--sample-ms", type=int, default=DEFAULT_SAMPLE_MS)
+    parser.add_argument("--sv", type=_parse_sv, default=DEFAULT_SV)
+    parser.add_argument("--timeout", type=float, default=0.05, help="Modbus socket timeout in seconds")
+    parser.add_argument(
+        "--csv-dir",
+        default=str(pathlib.Path(__file__).resolve().parent / "logs"),
+        help="Directory for CSV logs",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    try:
+        return run(_parse_args())
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+        print(f"live controller failed: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
