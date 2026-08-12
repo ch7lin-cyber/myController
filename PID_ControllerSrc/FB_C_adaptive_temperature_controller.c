@@ -402,9 +402,15 @@ MY_API void app_fb_temperature_controller_run(
         bumpless_transition = APP_FB_TRUE;
         fb->manual_active = APP_FB_FALSE;
     }
-    else if(fast_heat_active == APP_FB_TRUE || predictive_brake_active == APP_FB_TRUE)
+    else if(error >= APP_FB_INTEGRAL_FREEZE_ERROR)
     {
+        /* V3.1: large positive heating error only. Fast Heat/Brake states do not own I gating. */
         fb->pid.integral_enable = APP_FB_FALSE;
+    }
+    else if(error > APP_FB_I_ENABLE_ERROR)
+    {
+        /* Approach zone: allow I to build the holding power that FF may be missing. */
+        fb->pid.integral_enable = APP_FB_TRUE;
     }
     else if(fb->integral_disturbance_armed == APP_FB_TRUE)
     {
