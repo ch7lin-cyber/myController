@@ -64,18 +64,18 @@ typedef struct
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
- * Fast Heating Boost V3.2 for heater-only plants.
+ * Fast Heating Boost V3.3 for heater-only plants.
  * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
  *
- * Changes from V3.1 based on the real-plant 130C run:
- *   - Fast-heat hysteresis returns to enter +10.0C, exit +5.0C.
- *   - Integral is frozen only while positive error >= +30.0C.
- *     This lets I start building holding power earlier through Approach.
- *   - Predictive brake parameters are intentionally unchanged from V3.1.
+ * Changes from V3.2 based on the real-plant 130C run:
+ *   - Fast-heat hysteresis moves closer to SV: enter +5.0C, exit +3.0C.
+ *   - Full fast heat is reached at +30.0C instead of +40.0C.
+ *   - Integral freeze stays unchanged at +30.0C.
+ *   - Predictive brake parameters remain unchanged from V3.2.
  *
  * Fast heat:
- *   +10.0C..+40.0C -> smoothstep toward full PWM
- *   >= +40.0C       -> 100% PWM target
+ *   +5.0C..+30.0C -> smoothstep toward full PWM
+ *   >= +30.0C      -> 100% PWM target
  *
  * Predictive brake:
  *   predicted_pv = pv + filtered_delta_pv * prediction_ms / sample_time_ms
@@ -85,9 +85,9 @@ typedef struct
  *   at predicted_error <= 0C, fast heat is fully removed.
  */
 #define APP_FB_FAST_HEAT_ENABLE                 (1)
-#define APP_FB_FAST_HEAT_ENTER_ERROR            (100)
-#define APP_FB_FAST_HEAT_EXIT_ERROR              (50)
-#define APP_FB_FAST_HEAT_FULL_ERROR             (400)
+#define APP_FB_FAST_HEAT_ENTER_ERROR             (50)
+#define APP_FB_FAST_HEAT_EXIT_ERROR              (30)
+#define APP_FB_FAST_HEAT_FULL_ERROR             (300)
 #define APP_FB_FAST_HEAT_FULL_PWM              (1000)
 #define APP_FB_FAST_HEAT_BLEND_SCALE          (32768)
 
