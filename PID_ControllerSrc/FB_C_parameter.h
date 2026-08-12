@@ -64,27 +64,24 @@ typedef struct
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
- * Fast Heating Boost V3.4 for heater-only plants.
+ * Fast Heating Boost V3.5 for heater-only plants.
  * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
  *
- * V3.4 keeps the validated V3.3 main boost, integral gating and predictive brake,
- * and adds a small tail/approach boost near SV to prevent the 120C..125C region
- * from falling back to normal FF+PID too early.
+ * V3.5 keeps the validated V3.4 main boost, integral gating and predictive brake.
+ * The tail boost maximum remains +80 PWM. Only the tail curve shape is retuned:
+ * a concave response preserves more approach power in the +3C..+8C region without
+ * increasing maximum heater power.
  *
  * Main fast heat:
  *   +5.0C..+30.0C -> smoothstep toward full PWM
  *   >= +30.0C      -> 100% PWM target
  *
- * Tail boost:
- *   +3.0C..+10.0C  -> smooth additive approach boost
- *   +10.0C          -> up to +80 PWM (8%) above the V3.3 boosted target
+ * Tail boost V3.5:
+ *   +3.0C..+10.0C  -> concave smooth additive approach boost
+ *   +10.0C          -> up to +80 PWM (8%) above the main boosted target
  *   <= +3.0C        -> no tail boost
  *
- * Predictive brake remains highest priority:
- *   predicted_pv = pv + filtered_delta_pv * prediction_ms / sample_time_ms
- *   predicted_error = sv - predicted_pv
- *   predicted_error <= +3.0C suppresses boost toward normal FF+PID;
- *   predicted_error <= 0C removes boost completely.
+ * Predictive brake remains highest priority and is unchanged.
  */
 #define APP_FB_FAST_HEAT_ENABLE                 (1)
 #define APP_FB_FAST_HEAT_ENTER_ERROR             (50)
@@ -97,6 +94,8 @@ typedef struct
 #define APP_FB_FAST_HEAT_TAIL_START_ERROR         (30)
 #define APP_FB_FAST_HEAT_TAIL_FULL_ERROR         (100)
 #define APP_FB_FAST_HEAT_TAIL_MAX_ADD_PWM         (80)
+/* V3.5 tail shaping: 0=legacy smoothstep, 1=concave smoothstep (sqrt-like lift). */
+#define APP_FB_FAST_HEAT_TAIL_CONCAVE_ENABLE       (1)
 
 /* Integral separation from Fast Heat state: freeze only at large positive error. */
 #define APP_FB_INTEGRAL_FREEZE_ERROR             (300)
