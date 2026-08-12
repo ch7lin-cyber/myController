@@ -124,6 +124,61 @@ static int32_t app_fb_controller_fast_heat_tail_boost(int32_t error, int32_t boo
 #endif
 }
 
+static int32_t app_fb_controller_approach_hold(
+    int32_t error,
+    int32_t predicted_error,
+    int32_t normal_pwm)
+{
+#if APP_FB_APPROACH_HOLD_ENABLE
+    int64_t error_span;
+    int64_t error_q15;
+    int64_t predicted_q15;
+    int64_t hold_q15;
+    int64_t scale;
+    int64_t add_pwm;
+    int64_t target;
+
+    normal_pwm = APP_FB_LIMIT(normal_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+
+    /* V3.6 applies only after Fast Heat exits: +1.0C..+3.0C. */
+    if(error <= APP_FB_APPROACH_HOLD_START_ERROR)
+        return normal_pwm;
+    if(error > APP_FB_APPROACH_HOLD_FULL_ERROR)
+        return normal_pwm;
+
+    /* Predicted PV at/over SV always cancels Approach Hold. */
+    if(predicted_error <= APP_FB_PREDICTIVE_BRAKE_FULL_ERROR)
+        return normal_pwm;
+
+    scale = (int64_t)APP_FB_FAST_HEAT_BLEND_SCALE;
+    error_span = (int64_t)APP_FB_APPROACH_HOLD_FULL_ERROR -
+                 (int64_t)APP_FB_APPROACH_HOLD_START_ERROR;
+    if(scale <= 0 || error_span <= 0)
+        return normal_pwm;
+
+    error_q15 = (((int64_t)error - (int64_t)APP_FB_APPROACH_HOLD_START_ERROR) * scale) /
+                error_span;
+    if(error_q15 < 0) error_q15 = 0;
+    if(error_q15 > scale) error_q15 = scale;
+
+    /* Predictive-error authority: 0 at predicted SV, full authority by +3.0C. */
+    predicted_q15 = ((int64_t)predicted_error * scale) /
+                    (int64_t)APP_FB_PREDICTIVE_BRAKE_ENTER_ERROR;
+    if(predicted_q15 < 0) predicted_q15 = 0;
+    if(predicted_q15 > scale) predicted_q15 = scale;
+
+    hold_q15 = (error_q15 < predicted_q15) ? error_q15 : predicted_q15;
+    add_pwm = (hold_q15 * (int64_t)APP_FB_APPROACH_HOLD_MAX_ADD_PWM) / scale;
+    target = (int64_t)normal_pwm + add_pwm;
+
+    return app_fb_controller_limit_i64(target, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+#else
+    (void)error;
+    (void)predicted_error;
+    return APP_FB_LIMIT(normal_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+#endif
+}
+
 static int32_t app_fb_controller_predict_error(
     const APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     int32_t sv,
@@ -481,6 +536,11 @@ MY_API void app_fb_temperature_controller_run(
             target_pwm = app_fb_controller_predictive_brake_blend(predicted_error, pid_limited_pwm, boosted_pwm);
         else
             target_pwm = boosted_pwm;
+    }
+    else
+    {
+        /* V3.6: retain a very small predicted-error-limited hold in +1C..+3C. */
+        target_pwm = app_fb_controller_approach_hold(error, predicted_error, pid_limited_pwm);
     }
 
     actual_pwm = app_fb_rate_limit_run(&fb->rate_limit, target_pwm);
