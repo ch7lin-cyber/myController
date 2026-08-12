@@ -64,25 +64,27 @@ typedef struct
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
- * Fast Heating Boost V3.3 for heater-only plants.
+ * Fast Heating Boost V3.4 for heater-only plants.
  * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
  *
- * Changes from V3.2 based on the real-plant 130C run:
- *   - Fast-heat hysteresis moves closer to SV: enter +5.0C, exit +3.0C.
- *   - Full fast heat is reached at +30.0C instead of +40.0C.
- *   - Integral freeze stays unchanged at +30.0C.
- *   - Predictive brake parameters remain unchanged from V3.2.
+ * V3.4 keeps the validated V3.3 main boost, integral gating and predictive brake,
+ * and adds a small tail/approach boost near SV to prevent the 120C..125C region
+ * from falling back to normal FF+PID too early.
  *
- * Fast heat:
+ * Main fast heat:
  *   +5.0C..+30.0C -> smoothstep toward full PWM
  *   >= +30.0C      -> 100% PWM target
  *
- * Predictive brake:
+ * Tail boost:
+ *   +3.0C..+10.0C  -> smooth additive approach boost
+ *   +10.0C          -> up to +80 PWM (8%) above the V3.3 boosted target
+ *   <= +3.0C        -> no tail boost
+ *
+ * Predictive brake remains highest priority:
  *   predicted_pv = pv + filtered_delta_pv * prediction_ms / sample_time_ms
  *   predicted_error = sv - predicted_pv
- *   when the plant is heating and predicted_error <= +3.0C, boost is suppressed
- *   and target PWM is blended down toward normal FF+PID.
- *   at predicted_error <= 0C, fast heat is fully removed.
+ *   predicted_error <= +3.0C suppresses boost toward normal FF+PID;
+ *   predicted_error <= 0C removes boost completely.
  */
 #define APP_FB_FAST_HEAT_ENABLE                 (1)
 #define APP_FB_FAST_HEAT_ENTER_ERROR             (50)
@@ -90,6 +92,11 @@ typedef struct
 #define APP_FB_FAST_HEAT_FULL_ERROR             (300)
 #define APP_FB_FAST_HEAT_FULL_PWM              (1000)
 #define APP_FB_FAST_HEAT_BLEND_SCALE          (32768)
+
+#define APP_FB_FAST_HEAT_TAIL_ENABLE              (1)
+#define APP_FB_FAST_HEAT_TAIL_START_ERROR         (30)
+#define APP_FB_FAST_HEAT_TAIL_FULL_ERROR         (100)
+#define APP_FB_FAST_HEAT_TAIL_MAX_ADD_PWM         (80)
 
 /* Integral separation from Fast Heat state: freeze only at large positive error. */
 #define APP_FB_INTEGRAL_FREEZE_ERROR             (300)
