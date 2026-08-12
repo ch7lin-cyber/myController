@@ -64,24 +64,29 @@ typedef struct
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
- * Fast Heating Boost V3.5 for heater-only plants.
+ * Fast Heating Boost V3.6 for heater-only plants.
  * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
  *
- * V3.5 keeps the validated V3.4 main boost, integral gating and predictive brake.
- * The tail boost maximum remains +80 PWM. Only the tail curve shape is retuned:
- * a concave response preserves more approach power in the +3C..+8C region without
- * increasing maximum heater power.
+ * V3.6 keeps the validated V3.5 main boost, concave tail, integral gating and
+ * predictive brake. It adds a small independent Approach Hold in the +1C..+3C
+ * region, after Fast Heat has exited, to avoid dropping abruptly to FF+PID.
  *
  * Main fast heat:
  *   +5.0C..+30.0C -> smoothstep toward full PWM
  *   >= +30.0C      -> 100% PWM target
  *
- * Tail boost V3.5:
+ * Tail boost V3.5 retained:
  *   +3.0C..+10.0C  -> concave smooth additive approach boost
- *   +10.0C          -> up to +80 PWM (8%) above the main boosted target
+ *   +10.0C          -> up to +80 PWM (8%)
  *   <= +3.0C        -> no tail boost
  *
- * Predictive brake remains highest priority and is unchanged.
+ * Approach Hold V3.6:
+ *   +1.0C..+3.0C    -> up to +30 PWM (3%) above normal FF+PID
+ *   <= +1.0C        -> no hold
+ *   predicted_error -> scales the hold down as the predicted PV approaches SV
+ *   predicted_error <= 0 -> hold is fully cancelled
+ *
+ * Predictive brake / predicted-error authority remains highest priority.
  */
 #define APP_FB_FAST_HEAT_ENABLE                 (1)
 #define APP_FB_FAST_HEAT_ENTER_ERROR             (50)
@@ -94,8 +99,13 @@ typedef struct
 #define APP_FB_FAST_HEAT_TAIL_START_ERROR         (30)
 #define APP_FB_FAST_HEAT_TAIL_FULL_ERROR         (100)
 #define APP_FB_FAST_HEAT_TAIL_MAX_ADD_PWM         (80)
-/* V3.5 tail shaping: 0=legacy smoothstep, 1=concave smoothstep (sqrt-like lift). */
 #define APP_FB_FAST_HEAT_TAIL_CONCAVE_ENABLE       (1)
+
+/* V3.6 minimum approach power after the Fast Heat state exits. */
+#define APP_FB_APPROACH_HOLD_ENABLE                (1)
+#define APP_FB_APPROACH_HOLD_START_ERROR          (10)   /* +1.0C: zero hold */
+#define APP_FB_APPROACH_HOLD_FULL_ERROR           (30)   /* +3.0C: max hold */
+#define APP_FB_APPROACH_HOLD_MAX_ADD_PWM          (30)   /* +3.0% maximum */
 
 /* Integral separation from Fast Heat state: freeze only at large positive error. */
 #define APP_FB_INTEGRAL_FREEZE_ERROR             (300)
