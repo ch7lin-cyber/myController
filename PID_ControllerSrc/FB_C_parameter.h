@@ -64,18 +64,17 @@ typedef struct
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
- * Fast Heating Boost V3.1 for heater-only plants.
+ * Fast Heating Boost V3.2 for heater-only plants.
  * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
  *
- * Changes from V3 based on the first real-plant 130C run:
- *   - Fast-heat hysteresis is moved outward: enter +15.0C, exit +10.0C.
- *   - Integral freeze is independent of the fast-heat state.
- *     I is frozen only while |error| >= 20.0C and is allowed again in Approach.
- *   - Predictive brake horizon is reduced from 2.0s to 1.0s.
- *   - Predictive brake starts only inside predicted +3.0C instead of +10.0C.
+ * Changes from V3.1 based on the real-plant 130C run:
+ *   - Fast-heat hysteresis returns to enter +10.0C, exit +5.0C.
+ *   - Integral is frozen only while positive error >= +30.0C.
+ *     This lets I start building holding power earlier through Approach.
+ *   - Predictive brake parameters are intentionally unchanged from V3.1.
  *
  * Fast heat:
- *   +15.0C..+40.0C -> smoothstep toward full PWM
+ *   +10.0C..+40.0C -> smoothstep toward full PWM
  *   >= +40.0C       -> 100% PWM target
  *
  * Predictive brake:
@@ -86,14 +85,14 @@ typedef struct
  *   at predicted_error <= 0C, fast heat is fully removed.
  */
 #define APP_FB_FAST_HEAT_ENABLE                 (1)
-#define APP_FB_FAST_HEAT_ENTER_ERROR            (150)
-#define APP_FB_FAST_HEAT_EXIT_ERROR             (100)
+#define APP_FB_FAST_HEAT_ENTER_ERROR            (100)
+#define APP_FB_FAST_HEAT_EXIT_ERROR              (50)
 #define APP_FB_FAST_HEAT_FULL_ERROR             (400)
 #define APP_FB_FAST_HEAT_FULL_PWM              (1000)
 #define APP_FB_FAST_HEAT_BLEND_SCALE          (32768)
 
-/* Integral separation from Fast Heat state: freeze only at large error. */
-#define APP_FB_INTEGRAL_FREEZE_ERROR             (200)
+/* Integral separation from Fast Heat state: freeze only at large positive error. */
+#define APP_FB_INTEGRAL_FREEZE_ERROR             (300)
 
 #define APP_FB_PREDICTIVE_BRAKE_ENABLE           (1)
 #define APP_FB_PREDICTIVE_BRAKE_TIME_MS        (1000U)
