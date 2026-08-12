@@ -64,37 +64,46 @@ typedef struct
 #define APP_FB_I_SV_CHANGE_THRESHOLD  5
 
 /*
- * Fast Heating Boost V3 for heater-only plants.
+ * Fast Heating Boost V3.1 for heater-only plants.
  * Temperature error unit = 0.1 degC, PWM unit = 0.1%.
  *
+ * Changes from V3 based on the first real-plant 130C run:
+ *   - Fast-heat hysteresis is moved outward: enter +15.0C, exit +10.0C.
+ *   - Integral freeze is independent of the fast-heat state.
+ *     I is frozen only while |error| >= 20.0C and is allowed again in Approach.
+ *   - Predictive brake horizon is reduced from 2.0s to 1.0s.
+ *   - Predictive brake starts only inside predicted +3.0C instead of +10.0C.
+ *
  * Fast heat:
- *   enter at +10.0C, leave at +5.0C
- *   +10.0C..+40.0C -> smoothstep toward full PWM
- *   >= +40.0C -> 100% PWM target
+ *   +15.0C..+40.0C -> smoothstep toward full PWM
+ *   >= +40.0C       -> 100% PWM target
  *
  * Predictive brake:
  *   predicted_pv = pv + filtered_delta_pv * prediction_ms / sample_time_ms
  *   predicted_error = sv - predicted_pv
- *   when the plant is heating and predicted_error <= +10.0C, boost is suppressed
+ *   when the plant is heating and predicted_error <= +3.0C, boost is suppressed
  *   and target PWM is blended down toward normal FF+PID.
  *   at predicted_error <= 0C, fast heat is fully removed.
  */
 #define APP_FB_FAST_HEAT_ENABLE                 (1)
-#define APP_FB_FAST_HEAT_ENTER_ERROR            (100)
-#define APP_FB_FAST_HEAT_EXIT_ERROR              (50)
+#define APP_FB_FAST_HEAT_ENTER_ERROR            (150)
+#define APP_FB_FAST_HEAT_EXIT_ERROR             (100)
 #define APP_FB_FAST_HEAT_FULL_ERROR             (400)
 #define APP_FB_FAST_HEAT_FULL_PWM              (1000)
 #define APP_FB_FAST_HEAT_BLEND_SCALE          (32768)
 
+/* Integral separation from Fast Heat state: freeze only at large error. */
+#define APP_FB_INTEGRAL_FREEZE_ERROR             (200)
+
 #define APP_FB_PREDICTIVE_BRAKE_ENABLE           (1)
-#define APP_FB_PREDICTIVE_BRAKE_TIME_MS        (2000U)
-#define APP_FB_PREDICTIVE_BRAKE_ENTER_ERROR     (100)
+#define APP_FB_PREDICTIVE_BRAKE_TIME_MS        (1000U)
+#define APP_FB_PREDICTIVE_BRAKE_ENTER_ERROR      (30)
 #define APP_FB_PREDICTIVE_BRAKE_FULL_ERROR        (0)
 #define APP_FB_PREDICTIVE_BRAKE_MIN_RISE_DELTA    (1)
 
 #define APP_FB_D_FILTER_TIME_CONSTANT_MS  (140U)
 
-/* Faster heat-up and faster thermal braking for V3. */
+/* Fast output slew retained from V3. */
 #define APP_FB_PWM_RISE_RATE_PER_SEC  (3000)
 #define APP_FB_PWM_FALL_RATE_PER_SEC  (7500)
 
