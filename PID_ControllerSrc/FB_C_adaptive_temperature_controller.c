@@ -80,6 +80,45 @@ static int32_t app_fb_controller_fast_heat_blend(int32_t error, int32_t normal_p
 #endif
 }
 
+static int32_t app_fb_controller_fast_heat_tail_boost(int32_t error, int32_t boosted_pwm)
+{
+#if APP_FB_FAST_HEAT_TAIL_ENABLE
+    int64_t span;
+    int64_t x_q15;
+    int64_t smooth_q15;
+    int64_t scale;
+    int64_t add_pwm;
+    int64_t target;
+
+    boosted_pwm = APP_FB_LIMIT(boosted_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+
+    if(error <= APP_FB_FAST_HEAT_TAIL_START_ERROR)
+        return boosted_pwm;
+
+    if(error >= APP_FB_FAST_HEAT_TAIL_FULL_ERROR)
+        return APP_FB_LIMIT(boosted_pwm + APP_FB_FAST_HEAT_TAIL_MAX_ADD_PWM,
+                            APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+
+    span = (int64_t)APP_FB_FAST_HEAT_TAIL_FULL_ERROR -
+           (int64_t)APP_FB_FAST_HEAT_TAIL_START_ERROR;
+    scale = (int64_t)APP_FB_FAST_HEAT_BLEND_SCALE;
+    if(span <= 0 || scale <= 0) return boosted_pwm;
+
+    x_q15 = (((int64_t)error - (int64_t)APP_FB_FAST_HEAT_TAIL_START_ERROR) * scale) / span;
+    if(x_q15 < 0) x_q15 = 0;
+    if(x_q15 > scale) x_q15 = scale;
+
+    smooth_q15 = (x_q15 * x_q15 * ((3 * scale) - (2 * x_q15))) / (scale * scale);
+    add_pwm = (smooth_q15 * (int64_t)APP_FB_FAST_HEAT_TAIL_MAX_ADD_PWM) / scale;
+    target = (int64_t)boosted_pwm + add_pwm;
+
+    return app_fb_controller_limit_i64(target, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+#else
+    (void)error;
+    return APP_FB_LIMIT(boosted_pwm, APP_FB_PWM_MIN, APP_FB_PWM_MAX);
+#endif
+}
+
 static int32_t app_fb_controller_predict_error(
     const APP_FB_TEMPERATURE_CONTROLLER_T *fb,
     int32_t sv,
@@ -404,12 +443,10 @@ MY_API void app_fb_temperature_controller_run(
     }
     else if(error >= APP_FB_INTEGRAL_FREEZE_ERROR)
     {
-        /* V3.1: large positive heating error only. Fast Heat/Brake states do not own I gating. */
         fb->pid.integral_enable = APP_FB_FALSE;
     }
     else if(error > APP_FB_I_ENABLE_ERROR)
     {
-        /* Approach zone: allow I to build the holding power that FF may be missing. */
         fb->pid.integral_enable = APP_FB_TRUE;
     }
     else if(fb->integral_disturbance_armed == APP_FB_TRUE)
@@ -432,6 +469,9 @@ MY_API void app_fb_temperature_controller_run(
     if(fast_heat_active == APP_FB_TRUE)
     {
         boosted_pwm = app_fb_controller_fast_heat_blend(error, pid_limited_pwm);
+        boosted_pwm = app_fb_controller_fast_heat_tail_boost(error, boosted_pwm);
+
+        /* Predictive Brake is the final authority and may suppress both main and tail boost. */
         if(predictive_brake_active == APP_FB_TRUE)
             target_pwm = app_fb_controller_predictive_brake_blend(predicted_error, pid_limited_pwm, boosted_pwm);
         else
