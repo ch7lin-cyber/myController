@@ -65,7 +65,14 @@ typedef struct { uint32_t sample_time_ms; } APP_FB_TIMING_PARAMETER_T;
 #define APP_FB_INTEGRAL_FREEZE_ERROR             (300)
 
 #define APP_FB_PREDICTIVE_BRAKE_ENABLE           (1)
-#define APP_FB_PREDICTIVE_BRAKE_TIME_MS        (1000U)
+/*
+ * Branch 5 runtime prediction horizon.
+ * The V3.6 core still references APP_FB_PREDICTIVE_BRAKE_TIME_MS, but the
+ * symbol is now backed by a runtime variable maintained by the self tuner.
+ * This preserves the validated core code path while allowing online tuning.
+ */
+extern uint32_t g_app_fb_predictive_brake_time_ms;
+#define APP_FB_PREDICTIVE_BRAKE_TIME_MS        (g_app_fb_predictive_brake_time_ms)
 #define APP_FB_PREDICTIVE_BRAKE_ENTER_ERROR      (30)
 #define APP_FB_PREDICTIVE_BRAKE_FULL_ERROR        (0)
 #define APP_FB_PREDICTIVE_BRAKE_MIN_RISE_DELTA    (1)
