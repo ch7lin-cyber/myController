@@ -21,3 +21,27 @@ APP_FB_ERROR app_fb_temperature_controller_self_tuning_init(APP_FB_TEMPERATURE_C
     fb->self_tuning_initialized=APP_FB_TRUE;
     return APP_FB_OK;
 }
+
+MY_API void app_fb_temperature_controller_run_self_tuning(APP_FB_TEMPERATURE_CONTROLLER_T *fb,const APP_FB_TEMP_CONTROLLER_INPUT_T *input,APP_FB_TEMP_CONTROLLER_OUTPUT_T *output)
+{
+    const APP_FB_PROCESS_METRIC_T *m;
+    APP_FB_PID_PARAMETER_T p;
+    if(!fb||!input||!output)return;
+    app_fb_temperature_controller_run(fb,input,output);
+    if(fb->self_tuning_initialized==APP_FB_FALSE)return;
+    if(input->enable==APP_FB_FALSE||input->mode!=APP_FB_MODE_AUTO)
+    {
+        app_fb_process_observer_reset(&fb->observer);
+        app_fb_self_tuner_reset(&fb->self_tuner,fb->pid.param.ki,fb->predictive_brake_time_ms);
+        return;
+    }
+    m=app_fb_process_observer_run(&fb->observer,input->sv,input->pv);
+    if(!m)return;
+    if(app_fb_self_tuner_run(&fb->self_tuner,m)==APP_FB_TRUE)
+    {
+        p=fb->pid.param;
+        p.ki=fb->self_tuner.suggested_ki;
+        (void)app_fb_pid_reconfigure_timed(&fb->pid,&p);
+        fb->predictive_brake_time_ms=fb->self_tuner.suggested_predictive_time_ms;
+    }
+}
