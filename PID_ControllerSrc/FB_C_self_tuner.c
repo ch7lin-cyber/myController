@@ -2,7 +2,6 @@
 #include "FB_C_self_tuner.h"
 #include "FB_C_adaptive_temperature_controller.h"
 
-/* Runtime predictive-brake horizon consumed by the existing V3.6 core. */
 uint32_t g_app_fb_predictive_brake_time_ms = 1000U;
 
 static int32_t ci(int32_t v,int32_t a,int32_t b){return v<a?a:(v>b?b:v);}
@@ -13,12 +12,13 @@ APP_FB_ERROR app_fb_self_tuner_init(APP_FB_SELF_TUNER_T*f,const APP_FB_SELF_TUNE
     if(!f||!p)return APP_FB_ERROR_NULL_POINTER;
     if(p->ki_max<p->ki_min||p->predictive_time_max_ms<p->predictive_time_min_ms)return APP_FB_ERROR_PARAMETER;
     f->param=*p;
-    /* Requirement: parameter adaptation is opt-in. */
     f->enable=APP_FB_FALSE;
     f->update_ready=APP_FB_FALSE;
     f->settled_consumed=APP_FB_FALSE;
     f->suggested_ki=ci(ki,p->ki_min,p->ki_max);
     f->suggested_predictive_time_ms=cu(pt,p->predictive_time_min_ms,p->predictive_time_max_ms);
+    f->tune_count=0U;
+    f->last_tune_reason=APP_FB_SELF_TUNE_REASON_NONE;
     return APP_FB_OK;
 }
 
@@ -43,28 +43,59 @@ APP_FB_BOOL app_fb_self_tuner_run(APP_FB_SELF_TUNER_T*f,const APP_FB_PROCESS_MET
 {
     int32_t ki;
     uint32_t pt;
+    APP_FB_BOOL ki_changed=APP_FB_FALSE;
+    APP_FB_BOOL pt_changed=APP_FB_FALSE;
+    APP_FB_SELF_TUNE_REASON_T ki_reason=APP_FB_SELF_TUNE_REASON_NONE;
+    APP_FB_SELF_TUNE_REASON_T pt_reason=APP_FB_SELF_TUNE_REASON_NONE;
+
     if(!f||!m||!f->enable)return APP_FB_FALSE;
     f->update_ready=APP_FB_FALSE;
     if(!m->settled){f->settled_consumed=APP_FB_FALSE;return APP_FB_FALSE;}
     if(f->settled_consumed)return APP_FB_FALSE;
     f->settled_consumed=APP_FB_TRUE;
+
     ki=f->suggested_ki;
     pt=f->suggested_predictive_time_ms;
-    if(m->steady_error>f->param.steady_error_threshold)ki+=f->param.ki_step;
-    else if(m->steady_error<-f->param.steady_error_threshold)ki-=f->param.ki_step;
+
+    if(m->steady_error>f->param.steady_error_threshold)
+    {
+        ki+=f->param.ki_step;
+        ki_reason=APP_FB_SELF_TUNE_REASON_KI_INCREASE;
+    }
+    else if(m->steady_error<-f->param.steady_error_threshold)
+    {
+        ki-=f->param.ki_step;
+        ki_reason=APP_FB_SELF_TUNE_REASON_KI_DECREASE;
+    }
+
     if(m->overshoot>f->param.overshoot_threshold)
     {
-        if(pt<=UINT32_MAX-f->param.predictive_time_step_ms)pt+=f->param.predictive_time_step_ms;
+        if(pt<=UINT32_MAX-f->param.predictive_time_step_ms)
+        {
+            pt+=f->param.predictive_time_step_ms;
+            pt_reason=APP_FB_SELF_TUNE_REASON_PREDICTIVE_TIME_INCREASE;
+        }
     }
     else if(m->overshoot==0&&m->steady_error>f->param.steady_error_threshold&&pt>f->param.predictive_time_step_ms)
+    {
         pt-=f->param.predictive_time_step_ms;
+        pt_reason=APP_FB_SELF_TUNE_REASON_PREDICTIVE_TIME_DECREASE;
+    }
+
     ki=ci(ki,f->param.ki_min,f->param.ki_max);
     pt=cu(pt,f->param.predictive_time_min_ms,f->param.predictive_time_max_ms);
-    if(ki!=f->suggested_ki||pt!=f->suggested_predictive_time_ms)
+    ki_changed=(ki!=f->suggested_ki)?APP_FB_TRUE:APP_FB_FALSE;
+    pt_changed=(pt!=f->suggested_predictive_time_ms)?APP_FB_TRUE:APP_FB_FALSE;
+
+    if(ki_changed||pt_changed)
     {
         f->suggested_ki=ki;
         f->suggested_predictive_time_ms=pt;
         f->update_ready=APP_FB_TRUE;
+        if(f->tune_count<UINT32_MAX)f->tune_count++;
+        if(ki_changed&&pt_changed)f->last_tune_reason=APP_FB_SELF_TUNE_REASON_MULTIPLE;
+        else if(ki_changed)f->last_tune_reason=ki_reason;
+        else f->last_tune_reason=pt_reason;
     }
     return f->update_ready;
 }
@@ -95,11 +126,9 @@ MY_API void app_fb_temperature_controller_run_self_tuning(APP_FB_TEMPERATURE_CON
         return;
     }
 
-    /* Diagnostics are always active in AUTO, regardless of tuner enable. */
     m=app_fb_process_observer_run(&fb->observer,input->sv,input->pv);
     if(!m)return;
 
-    /* Parameter commit occurs only when self tuning has explicitly been enabled. */
     if(app_fb_self_tuner_run(&fb->self_tuner,m)==APP_FB_TRUE)
     {
         p=fb->pid.param;
