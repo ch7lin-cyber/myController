@@ -9,6 +9,16 @@
 extern "C" {
 #endif
 
+typedef enum
+{
+    APP_FB_SELF_TUNE_REASON_NONE = 0,
+    APP_FB_SELF_TUNE_REASON_KI_INCREASE,
+    APP_FB_SELF_TUNE_REASON_KI_DECREASE,
+    APP_FB_SELF_TUNE_REASON_PREDICTIVE_TIME_INCREASE,
+    APP_FB_SELF_TUNE_REASON_PREDICTIVE_TIME_DECREASE,
+    APP_FB_SELF_TUNE_REASON_MULTIPLE
+} APP_FB_SELF_TUNE_REASON_T;
+
 typedef struct
 {
     int32_t ki_min;
@@ -21,10 +31,6 @@ typedef struct
     APP_FB_TEMP overshoot_threshold;
 } APP_FB_SELF_TUNER_PARAMETER_T;
 
-/*
- * Self tuning is OFF by default. Diagnostics/observer operation is independent
- * from this enable flag and remains active in the controller wrapper.
- */
 typedef struct
 {
     APP_FB_BOOL enable;
@@ -32,6 +38,8 @@ typedef struct
     APP_FB_BOOL settled_consumed;
     int32_t suggested_ki;
     uint32_t suggested_predictive_time_ms;
+    uint32_t tune_count;
+    APP_FB_SELF_TUNE_REASON_T last_tune_reason;
     APP_FB_SELF_TUNER_PARAMETER_T param;
 } APP_FB_SELF_TUNER_T;
 
