@@ -104,6 +104,9 @@ extern uint32_t g_app_fb_predictive_brake_time_ms;
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_MIN_MS    (500U)
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_MAX_MS   (2000U)
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_STEP_MS   (100U)
+#define APP_FB_SELF_TUNE_MIN_HEATING_STEP            (50)     /* +5.0C */
+#define APP_FB_SELF_TUNE_COOLDOWN_MS              (30000U)
+#define APP_FB_SELF_TUNE_MAX_COMMITS_PER_SESSION     (20U)
 
 #ifdef __cplusplus
 }
