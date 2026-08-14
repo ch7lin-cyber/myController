@@ -36,7 +36,10 @@ static const APP_FB_SELF_TUNER_PARAMETER_T heater_self_tuner =
     .predictive_time_max_ms = APP_FB_SELF_TUNE_PREDICTIVE_TIME_MAX_MS,
     .predictive_time_step_ms = APP_FB_SELF_TUNE_PREDICTIVE_TIME_STEP_MS,
     .steady_error_threshold = APP_FB_SELF_TUNE_STEADY_ERROR_THRESHOLD,
-    .overshoot_threshold = APP_FB_SELF_TUNE_OVERSHOOT_THRESHOLD
+    .overshoot_threshold = APP_FB_SELF_TUNE_OVERSHOOT_THRESHOLD,
+    .min_heating_step = APP_FB_SELF_TUNE_MIN_HEATING_STEP,
+    .cooldown_ms = APP_FB_SELF_TUNE_COOLDOWN_MS,
+    .max_commits_per_session = APP_FB_SELF_TUNE_MAX_COMMITS_PER_SESSION
 };
 
 APP_FB_TEMPERATURE_CONTROLLER_T heater_controller;
