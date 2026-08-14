@@ -29,6 +29,9 @@ typedef struct
     uint32_t predictive_time_step_ms;
     APP_FB_TEMP steady_error_threshold;
     APP_FB_TEMP overshoot_threshold;
+    APP_FB_TEMP min_heating_step;
+    uint32_t cooldown_ms;
+    uint32_t max_commits_per_session;
 } APP_FB_SELF_TUNER_PARAMETER_T;
 
 typedef struct
@@ -36,6 +39,10 @@ typedef struct
     APP_FB_BOOL enable;
     APP_FB_BOOL update_ready;
     APP_FB_BOOL settled_consumed;
+    APP_FB_BOOL response_qualified;
+    APP_FB_TEMP response_start_sv;
+    APP_FB_TEMP response_start_pv;
+    uint32_t cooldown_remaining_ms;
     int32_t suggested_ki;
     uint32_t suggested_predictive_time_ms;
     uint32_t tune_count;
@@ -57,6 +64,16 @@ void app_fb_self_tuner_reset(
 void app_fb_self_tuner_set_enable(
     APP_FB_SELF_TUNER_T *fb,
     APP_FB_BOOL enable);
+
+void app_fb_self_tuner_begin_response(
+    APP_FB_SELF_TUNER_T *fb,
+    APP_FB_TEMP sv,
+    APP_FB_TEMP pv,
+    APP_FB_BOOL qualified);
+
+void app_fb_self_tuner_tick(
+    APP_FB_SELF_TUNER_T *fb,
+    uint32_t elapsed_ms);
 
 APP_FB_BOOL app_fb_self_tuner_run(
     APP_FB_SELF_TUNER_T *fb,
