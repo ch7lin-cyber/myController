@@ -77,7 +77,6 @@ MY_API APP_FB_ERROR Heater_Control_InitExTimed(
         &timing);
     if(s != APP_FB_OK) return s;
 
-    /* Initializes diagnostics and tuner state; tuner itself remains OFF. */
     return app_fb_temperature_controller_self_tuning_init(
         &heater_controller,
         &heater_self_tuner,
@@ -120,6 +119,7 @@ MY_API APP_FB_ERROR Heater_GetSelfTuningDiagnostics(
     d->self_tuning_enabled = heater_controller.self_tuner.enable;
     d->response_active = m->response_active;
     d->settled = m->settled;
+    d->response_qualified = heater_controller.self_tuner.response_qualified;
     d->current_ki = heater_controller.pid.param.ki;
     d->current_predictive_time_ms = heater_controller.predictive_brake_time_ms;
     d->peak_pv = m->peak_pv;
@@ -128,7 +128,9 @@ MY_API APP_FB_ERROR Heater_GetSelfTuningDiagnostics(
     d->pv_slope_per_s = m->pv_slope_per_s;
     d->elapsed_time_ms = m->elapsed_time_ms;
     d->settling_time_ms = m->settling_time_ms;
+    d->cooldown_remaining_ms = heater_controller.self_tuner.cooldown_remaining_ms;
     d->tune_count = heater_controller.self_tuner.tune_count;
+    d->max_tunes_per_session = heater_controller.self_tuner.param.max_commits_per_session;
     d->last_tune_reason = heater_controller.self_tuner.last_tune_reason;
 
     return APP_FB_OK;
@@ -153,7 +155,6 @@ MY_API void Heater_myAdptiveControl(
     input.pv = input_pv;
     input.mode = APP_FB_MODE_AUTO;
 
-    /* Diagnostics run every AUTO cycle; parameter adaptation is opt-in. */
     app_fb_temperature_controller_run_self_tuning(
         &heater_controller,
         &input,
