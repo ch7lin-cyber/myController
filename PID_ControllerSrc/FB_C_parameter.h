@@ -65,12 +65,7 @@ typedef struct { uint32_t sample_time_ms; } APP_FB_TIMING_PARAMETER_T;
 #define APP_FB_INTEGRAL_FREEZE_ERROR             (300)
 
 #define APP_FB_PREDICTIVE_BRAKE_ENABLE           (1)
-/*
- * Branch 5 runtime prediction horizon.
- * The V3.6 core still references APP_FB_PREDICTIVE_BRAKE_TIME_MS, but the
- * symbol is now backed by a runtime variable maintained by the self tuner.
- * This preserves the validated core code path while allowing online tuning.
- */
+#define APP_FB_PREDICTIVE_BRAKE_TIME_DEFAULT_MS (1000U)
 extern uint32_t g_app_fb_predictive_brake_time_ms;
 #define APP_FB_PREDICTIVE_BRAKE_TIME_MS        (g_app_fb_predictive_brake_time_ms)
 #define APP_FB_PREDICTIVE_BRAKE_ENTER_ERROR      (30)
@@ -99,13 +94,13 @@ extern uint32_t g_app_fb_predictive_brake_time_ms;
 #define APP_FB_ADAPTIVE_TIME_MAX_MS          (86400000U)
 
 /* Branch 5 self-tuning defaults. Temperature unit = 0.1 degC. */
-#define APP_FB_SELF_TUNE_SETTLE_BAND                 (2)      /* +/-0.2C */
+#define APP_FB_SELF_TUNE_SETTLE_BAND                 (2)
 #define APP_FB_SELF_TUNE_SETTLE_REQUIRED_MS       (3000U)
 #define APP_FB_SELF_TUNE_KI_MIN                    (300)
 #define APP_FB_SELF_TUNE_KI_MAX                   (1200)
 #define APP_FB_SELF_TUNE_KI_STEP                    (25)
-#define APP_FB_SELF_TUNE_STEADY_ERROR_THRESHOLD      (2)      /* 0.2C */
-#define APP_FB_SELF_TUNE_OVERSHOOT_THRESHOLD         (5)      /* 0.5C */
+#define APP_FB_SELF_TUNE_STEADY_ERROR_THRESHOLD      (2)
+#define APP_FB_SELF_TUNE_OVERSHOOT_THRESHOLD         (5)
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_MIN_MS    (500U)
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_MAX_MS   (2000U)
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_STEP_MS   (100U)
