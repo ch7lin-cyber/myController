@@ -18,6 +18,7 @@ typedef struct
     APP_FB_BOOL self_tuning_enabled;
     APP_FB_BOOL response_active;
     APP_FB_BOOL settled;
+    APP_FB_BOOL response_qualified;
     int32_t current_ki;
     uint32_t current_predictive_time_ms;
     APP_FB_TEMP peak_pv;
@@ -26,7 +27,9 @@ typedef struct
     int32_t pv_slope_per_s;
     uint32_t elapsed_time_ms;
     uint32_t settling_time_ms;
+    uint32_t cooldown_remaining_ms;
     uint32_t tune_count;
+    uint32_t max_tunes_per_session;
     APP_FB_SELF_TUNE_REASON_T last_tune_reason;
 } HEATER_SELF_TUNING_DIAGNOSTICS_T;
 
