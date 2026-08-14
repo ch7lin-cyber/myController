@@ -10,11 +10,15 @@ static uint32_t cu(uint32_t v,uint32_t a,uint32_t b){return v<a?a:(v>b?b:v);}
 APP_FB_ERROR app_fb_self_tuner_init(APP_FB_SELF_TUNER_T*f,const APP_FB_SELF_TUNER_PARAMETER_T*p,int32_t ki,uint32_t pt)
 {
     if(!f||!p)return APP_FB_ERROR_NULL_POINTER;
-    if(p->ki_max<p->ki_min||p->predictive_time_max_ms<p->predictive_time_min_ms)return APP_FB_ERROR_PARAMETER;
+    if(p->ki_max<p->ki_min||p->predictive_time_max_ms<p->predictive_time_min_ms||p->min_heating_step<0)return APP_FB_ERROR_PARAMETER;
     f->param=*p;
     f->enable=APP_FB_FALSE;
     f->update_ready=APP_FB_FALSE;
-    f->settled_consumed=APP_FB_FALSE;
+    f->settled_consumed=APP_FB_TRUE;
+    f->response_qualified=APP_FB_FALSE;
+    f->response_start_sv=0;
+    f->response_start_pv=0;
+    f->cooldown_remaining_ms=0U;
     f->suggested_ki=ci(ki,p->ki_min,p->ki_max);
     f->suggested_predictive_time_ms=cu(pt,p->predictive_time_min_ms,p->predictive_time_max_ms);
     f->tune_count=0U;
@@ -26,7 +30,10 @@ void app_fb_self_tuner_reset(APP_FB_SELF_TUNER_T*f,int32_t ki,uint32_t pt)
 {
     if(!f)return;
     f->update_ready=APP_FB_FALSE;
-    f->settled_consumed=APP_FB_FALSE;
+    f->settled_consumed=APP_FB_TRUE;
+    f->response_qualified=APP_FB_FALSE;
+    f->response_start_sv=0;
+    f->response_start_pv=0;
     f->suggested_ki=ci(ki,f->param.ki_min,f->param.ki_max);
     f->suggested_predictive_time_ms=cu(pt,f->param.predictive_time_min_ms,f->param.predictive_time_max_ms);
 }
@@ -36,7 +43,25 @@ void app_fb_self_tuner_set_enable(APP_FB_SELF_TUNER_T *f,APP_FB_BOOL enable)
     if(!f)return;
     f->enable=(enable!=APP_FB_FALSE)?APP_FB_TRUE:APP_FB_FALSE;
     f->update_ready=APP_FB_FALSE;
+    f->settled_consumed=APP_FB_TRUE;
+    f->response_qualified=APP_FB_FALSE;
+}
+
+void app_fb_self_tuner_begin_response(APP_FB_SELF_TUNER_T *f,APP_FB_TEMP sv,APP_FB_TEMP pv,APP_FB_BOOL qualified)
+{
+    if(!f)return;
+    f->response_start_sv=sv;
+    f->response_start_pv=pv;
+    f->response_qualified=(qualified!=APP_FB_FALSE)?APP_FB_TRUE:APP_FB_FALSE;
     f->settled_consumed=APP_FB_FALSE;
+    f->update_ready=APP_FB_FALSE;
+}
+
+void app_fb_self_tuner_tick(APP_FB_SELF_TUNER_T *f,uint32_t elapsed_ms)
+{
+    if(!f||f->cooldown_remaining_ms==0U)return;
+    if(elapsed_ms>=f->cooldown_remaining_ms)f->cooldown_remaining_ms=0U;
+    else f->cooldown_remaining_ms-=elapsed_ms;
 }
 
 APP_FB_BOOL app_fb_self_tuner_run(APP_FB_SELF_TUNER_T*f,const APP_FB_PROCESS_METRIC_T*m)
@@ -50,9 +75,14 @@ APP_FB_BOOL app_fb_self_tuner_run(APP_FB_SELF_TUNER_T*f,const APP_FB_PROCESS_MET
 
     if(!f||!m||!f->enable)return APP_FB_FALSE;
     f->update_ready=APP_FB_FALSE;
-    if(!m->settled){f->settled_consumed=APP_FB_FALSE;return APP_FB_FALSE;}
+    if(!m->settled)return APP_FB_FALSE;
     if(f->settled_consumed)return APP_FB_FALSE;
     f->settled_consumed=APP_FB_TRUE;
+
+    /* Diagnostics may settle for any response, but tuning requires a qualified heating event. */
+    if(f->response_qualified==APP_FB_FALSE)return APP_FB_FALSE;
+    if(f->cooldown_remaining_ms!=0U)return APP_FB_FALSE;
+    if(f->param.max_commits_per_session!=0U&&f->tune_count>=f->param.max_commits_per_session)return APP_FB_FALSE;
 
     ki=f->suggested_ki;
     pt=f->suggested_predictive_time_ms;
@@ -68,6 +98,7 @@ APP_FB_BOOL app_fb_self_tuner_run(APP_FB_SELF_TUNER_T*f,const APP_FB_PROCESS_MET
         ki_reason=APP_FB_SELF_TUNE_REASON_KI_DECREASE;
     }
 
+    /* Predictive-brake learning is valid only because response_qualified means heating. */
     if(m->overshoot>f->param.overshoot_threshold)
     {
         if(pt<=UINT32_MAX-f->param.predictive_time_step_ms)
@@ -93,6 +124,7 @@ APP_FB_BOOL app_fb_self_tuner_run(APP_FB_SELF_TUNER_T*f,const APP_FB_PROCESS_MET
         f->suggested_predictive_time_ms=pt;
         f->update_ready=APP_FB_TRUE;
         if(f->tune_count<UINT32_MAX)f->tune_count++;
+        f->cooldown_remaining_ms=f->param.cooldown_ms;
         if(ki_changed&&pt_changed)f->last_tune_reason=APP_FB_SELF_TUNE_REASON_MULTIPLE;
         else if(ki_changed)f->last_tune_reason=ki_reason;
         else f->last_tune_reason=pt_reason;
@@ -116,9 +148,16 @@ MY_API void app_fb_temperature_controller_run_self_tuning(APP_FB_TEMPERATURE_CON
 {
     const APP_FB_PROCESS_METRIC_T *m;
     APP_FB_PID_PARAMETER_T p;
+    APP_FB_BOOL new_response;
+    APP_FB_BOOL qualified;
+    int32_t heating_step;
+
     if(!fb||!input||!output)return;
     app_fb_temperature_controller_run(fb,input,output);
     if(fb->self_tuning_initialized==APP_FB_FALSE)return;
+
+    app_fb_self_tuner_tick(&fb->self_tuner,fb->timing.sample_time_ms);
+
     if(input->enable==APP_FB_FALSE||input->mode!=APP_FB_MODE_AUTO)
     {
         app_fb_process_observer_reset(&fb->observer);
@@ -126,6 +165,15 @@ MY_API void app_fb_temperature_controller_run_self_tuning(APP_FB_TEMPERATURE_CON
         return;
     }
 
+    new_response=(fb->observer.initialized==APP_FB_FALSE||input->sv!=fb->observer.active_sv)?APP_FB_TRUE:APP_FB_FALSE;
+    if(new_response==APP_FB_TRUE)
+    {
+        heating_step=(int32_t)input->sv-(int32_t)input->pv;
+        qualified=(heating_step>=(int32_t)fb->self_tuner.param.min_heating_step)?APP_FB_TRUE:APP_FB_FALSE;
+        app_fb_self_tuner_begin_response(&fb->self_tuner,input->sv,input->pv,qualified);
+    }
+
+    /* Observer/diagnostics always run, even when self tuning is disabled. */
     m=app_fb_process_observer_run(&fb->observer,input->sv,input->pv);
     if(!m)return;
 
