@@ -94,13 +94,14 @@ extern uint32_t g_app_fb_predictive_brake_time_ms;
 #define APP_FB_ADAPTIVE_TIME_MAX_MS          (86400000U)
 
 /* Branch 5 self-tuning defaults. Temperature unit = 0.1 degC. */
-#define APP_FB_SELF_TUNE_SETTLE_BAND                 (2)
+#define APP_FB_SELF_TUNE_SETTLE_BAND                 (2)      /* +/-0.2C */
 #define APP_FB_SELF_TUNE_SETTLE_REQUIRED_MS       (3000U)
 #define APP_FB_SELF_TUNE_KI_MIN                    (300)
 #define APP_FB_SELF_TUNE_KI_MAX                   (1200)
 #define APP_FB_SELF_TUNE_KI_STEP                    (25)
-#define APP_FB_SELF_TUNE_STEADY_ERROR_THRESHOLD      (2)
-#define APP_FB_SELF_TUNE_OVERSHOOT_THRESHOLD         (5)
+/* Must be smaller than settle band so a settled residual error can trigger Ki trim. */
+#define APP_FB_SELF_TUNE_STEADY_ERROR_THRESHOLD      (1)      /* 0.1C */
+#define APP_FB_SELF_TUNE_OVERSHOOT_THRESHOLD         (5)      /* 0.5C */
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_MIN_MS    (500U)
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_MAX_MS   (2000U)
 #define APP_FB_SELF_TUNE_PREDICTIVE_TIME_STEP_MS   (100U)
