@@ -79,7 +79,6 @@ APP_FB_BOOL app_fb_self_tuner_run(APP_FB_SELF_TUNER_T*f,const APP_FB_PROCESS_MET
     if(f->settled_consumed)return APP_FB_FALSE;
     f->settled_consumed=APP_FB_TRUE;
 
-    /* Diagnostics may settle for any response, but tuning requires a qualified heating event. */
     if(f->response_qualified==APP_FB_FALSE)return APP_FB_FALSE;
     if(f->cooldown_remaining_ms!=0U)return APP_FB_FALSE;
     if(f->param.max_commits_per_session!=0U&&f->tune_count>=f->param.max_commits_per_session)return APP_FB_FALSE;
@@ -98,7 +97,6 @@ APP_FB_BOOL app_fb_self_tuner_run(APP_FB_SELF_TUNER_T*f,const APP_FB_PROCESS_MET
         ki_reason=APP_FB_SELF_TUNE_REASON_KI_DECREASE;
     }
 
-    /* Predictive-brake learning is valid only because response_qualified means heating. */
     if(m->overshoot>f->param.overshoot_threshold)
     {
         if(pt<=UINT32_MAX-f->param.predictive_time_step_ms)
@@ -150,7 +148,7 @@ MY_API void app_fb_temperature_controller_run_self_tuning(APP_FB_TEMPERATURE_CON
     APP_FB_PID_PARAMETER_T p;
     APP_FB_BOOL new_response;
     APP_FB_BOOL qualified;
-    int32_t heating_step;
+    int32_t step_value;
 
     if(!fb||!input||!output)return;
     app_fb_temperature_controller_run(fb,input,output);
@@ -168,12 +166,21 @@ MY_API void app_fb_temperature_controller_run_self_tuning(APP_FB_TEMPERATURE_CON
     new_response=(fb->observer.initialized==APP_FB_FALSE||input->sv!=fb->observer.active_sv)?APP_FB_TRUE:APP_FB_FALSE;
     if(new_response==APP_FB_TRUE)
     {
-        heating_step=(int32_t)input->sv-(int32_t)input->pv;
-        qualified=(heating_step>=(int32_t)fb->self_tuner.param.min_heating_step)?APP_FB_TRUE:APP_FB_FALSE;
+        if(fb->observer.initialized==APP_FB_FALSE)
+        {
+            /* First AUTO response: qualify only when meaningful heating demand exists. */
+            step_value=(int32_t)input->sv-(int32_t)input->pv;
+        }
+        else
+        {
+            /* Later responses: require the commanded SV itself to rise enough. */
+            step_value=(int32_t)input->sv-(int32_t)fb->observer.active_sv;
+        }
+
+        qualified=(step_value>=(int32_t)fb->self_tuner.param.min_heating_step)?APP_FB_TRUE:APP_FB_FALSE;
         app_fb_self_tuner_begin_response(&fb->self_tuner,input->sv,input->pv,qualified);
     }
 
-    /* Observer/diagnostics always run, even when self tuning is disabled. */
     m=app_fb_process_observer_run(&fb->observer,input->sv,input->pv);
     if(!m)return;
 
